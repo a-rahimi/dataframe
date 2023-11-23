@@ -18,20 +18,20 @@ struct NoValue
 {
 };
 
-template <typename Tag, typename Value, typename ValueOther>
+template <typename Tag, typename Value>
 struct IndexReduceOp
 {
     // Indexing fails if the tag or values don't have the right type.
     template <typename T, typename TO, typename V, typename VO>
-    auto operator()(T tag, TO tag_other, V v, VO v_other)
+    auto operator()(T tag, TO tag_other, V v, VO)
     {
         return std::pair(NoTag(), v);
     }
 
     // A successful indexing reduction takes the value of `this`, and ignores
     // the value of the index.
-    template <>
-    auto operator()(Tag tag, Tag tag_other, Value v, ValueOther v_other)
+    template <typename ValueOther>
+    auto operator()(Tag tag, Tag tag_other, Value v, ValueOther)
     {
         return std::pair(tag, v);
     }
@@ -58,7 +58,7 @@ struct DataFrame
     template <typename ValueOther>
     DataFrame<Tag, Value> operator[](const DataFrame<Tag, ValueOther> &index)
     {
-        return merge(*this, index, Value(), IndexReduceOp<Tag, Value, ValueOther>());
+        return merge(*this, index, Value(), IndexReduceOp<Tag, Value>());
     }
 
     // By default, nothing gets added to the dataframe.
@@ -98,6 +98,7 @@ struct IndexRange
 
 struct RangeTag;
 
+// A dataframe with range tags.
 template <typename Value>
 struct DataFrame<RangeTag, Value>
 {
@@ -105,6 +106,19 @@ struct DataFrame<RangeTag, Value>
     IndexRange tags;
 
     size_t size() const { return values.size(); }
+};
+
+// A dataframe with no values. Just tags.
+template <typename Tag>
+struct DataFrame<Tag, NoValue>
+{
+    std::vector<Tag> tags;
+    struct PlaceHolderVector
+    {
+        auto operator[](size_t i) const { return NoValue(); }
+    } values;
+
+    size_t size() const { return tags.size(); }
 };
 
 template <typename Op, typename Tag, typename Value1, typename Value2, typename Tout>
@@ -186,7 +200,6 @@ struct JoinReductionOpAdaptor
 
     auto operator()(Tag tag1, Tag tag2, Value1 v1, Value2 v2)
     {
-        assert(tag1 == tag2);
         return std::pair(tag1, op(v1, v2));
     }
 };
@@ -319,8 +332,25 @@ void test_index()
     assert(g.values[1] == 30.f);
 }
 
+void test_index_no_values()
+{
+    auto df = DataFrame<int, float>{{1, 2, 3, 4}, {10., 20., 30., 40.}};
+
+    auto i = DataFrame<int, NoValue>{{2, 3}};
+
+    auto g = df[i];
+
+    assert(g.size() == 2);
+
+    assert(g.tags[0] == 2);
+    assert(g.values[0] == 20.f);
+    assert(g.tags[1] == 3);
+    assert(g.values[1] == 30.f);
+}
+
 int main()
 {
+    test_index_no_values();
     test_join_simple_pair();
     test_join_duplicates_left();
     test_index();
