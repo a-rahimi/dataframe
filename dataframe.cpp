@@ -25,7 +25,7 @@ struct IndexReduceOp
     template <typename T, typename TO, typename V, typename VO>
     auto operator()(T tag, TO tag_other, V v, VO v_other)
     {
-        return std::make_pair(NoTag(), v);
+        return std::pair(NoTag(), v);
     }
 
     // A successful indexing reduction takes the value of `this`, and ignores
@@ -33,7 +33,7 @@ struct IndexReduceOp
     template <>
     auto operator()(Tag tag, Tag tag_other, Value v, ValueOther v_other)
     {
-        return std::make_pair(tag, v);
+        return std::pair(tag, v);
     }
 };
 
@@ -181,13 +181,13 @@ struct JoinReductionOpAdaptor
     template <typename T1, typename T2, typename V1, typename V2>
     auto operator()(T1 tag1, T2 tag2, V1 v1, V2 v2)
     {
-        return std::make_pair(NoTag(), v1);
+        return std::pair(NoTag(), v1);
     }
 
     auto operator()(Tag tag1, Tag tag2, Value1 v1, Value2 v2)
     {
         assert(tag1 == tag2);
-        return std::make_pair(tag1, op(v1, v2));
+        return std::pair(tag1, op(v1, v2));
     }
 };
 
@@ -198,21 +198,21 @@ struct JoinPairOp
     template <typename T1, typename T2, typename V1, typename V2>
     auto operator()(T1 tag1, T2 tag2, V1 v1, V2 v2)
     {
-        return std::make_pair(NoTag(), v2);
+        return std::pair(NoTag(), v2);
     }
 
     // Combining a Value1 and a Value2.
     template <>
     auto operator()(Tag tag1, Tag tag2, Value1 v1, Value2 v2)
     {
-        return std::make_pair(tag1, std::pair<Value1, Value2>(v1, v2));
+        return std::pair(tag1, std::pair(v1, v2));
     }
 
     // Combining a Pair with another Pair results in a flat pair. Notably, it does not result
     template <>
     auto operator()(Tag tag1, Tag tag2, Value1 v1, std::pair<Value1, Value2> v2)
     {
-        return std::make_pair(tag1, std::pair<Value1, Value2>(v1, v2.second));
+        return std::pair(tag1, std::pair(v1, v2.second));
     }
 };
 
@@ -296,11 +296,11 @@ void test_join_simple_pair()
 
     assert(g.size() == 3);
     assert(g.tags[0] == 1);
-    assert(g.values[0] == std::make_pair(10.f, -11.f));
+    assert(g.values[0] == std::pair(10.f, -11.f));
     assert(g.tags[1] == 2);
-    assert(g.values[1] == std::make_pair(20.f, -22.f));
+    assert(g.values[1] == std::pair(20.f, -22.f));
     assert(g.tags[2] == 3);
-    assert(g.values[2] == std::make_pair(30.f, -33.f));
+    assert(g.values[2] == std::pair(30.f, -33.f));
 }
 
 void test_index()
