@@ -1,7 +1,7 @@
 /*
 Compile this demo with
 
-   clang++ -Wall -std=c++2b  dataframe.cpp
+    clang++ -Wall -std=c++2b  dataframe.cpp
 */
 
 #include <cassert>
@@ -171,30 +171,19 @@ merge(const DataFrame<Tag, Value1> &df1, const DataFrame<Tag, Value2> &df2, Tout
     return df_out;
 }
 
-template <typename ReduceOp>
+template <typename ReduceOp, typename Tag, typename Value1, typename Value2>
 struct JoinReductionOpAdaptor
 {
     ReduceOp op;
-    JoinReductionOpAdaptor(ReduceOp _op) : op(_op) {}
+    JoinReductionOpAdaptor(ReduceOp _op, Tag, Value1, Value2) : op(_op) {}
 
-    template <typename Tag, typename Value1, typename Value2>
-    auto operator()(Tag tag1, NoTag tag2, Value1 v1, Value2 v2)
+    // By default, joining generates a NoTag
+    template <typename T1, typename T2, typename V1, typename V2>
+    auto operator()(T1 tag1, T2 tag2, V1 v1, V2 v2)
     {
-        return std::make_pair(NoTag(), Value1());
-    }
-    template <typename Tag, typename Value1, typename Value2>
-    auto operator()(NoTag tag1, Tag tag2, Value1 v1, Value2 v2)
-    {
-        return std::make_pair(NoTag(), Value1());
+        return std::make_pair(NoTag(), v1);
     }
 
-    template <typename Tag, typename Value1>
-    auto operator()(Tag tag1, Tag tag2, Value1 v1, NoValue v)
-    {
-        return std::make_pair(NoTag(), v);
-    }
-
-    template <typename Tag, typename Value1, typename Value2>
     auto operator()(Tag tag1, Tag tag2, Value1 v1, Value2 v2)
     {
         assert(tag1 == tag2);
@@ -238,7 +227,8 @@ struct Join
     auto sum()
     {
         return merge(df1, df2, Value1(0), JoinReductionOpAdaptor([](Value1 v1, Value2 v2)
-                                                                 { return v1 + v2; }));
+                                                                 { return v1 + v2; },
+                                                                 Tag(), Value1(), Value2()));
     }
 
     auto pair()
