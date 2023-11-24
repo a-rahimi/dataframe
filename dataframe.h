@@ -5,6 +5,13 @@
 #include <utility>
 #include <vector>
 
+template <typename T1, typename T2>
+std::ostream &operator<<(std::ostream &s, const std::pair<T1, T2> &p)
+{
+    s << '(' << p.first << ", " << p.second << ')';
+    return s;
+}
+
 struct NoTag
 {
 };
@@ -31,13 +38,6 @@ struct IndexReduceOp
         return std::pair(tag, v);
     }
 };
-
-template <typename T1, typename T2>
-std::ostream &operator<<(std::ostream &s, const std::pair<T1, T2> &p)
-{
-    s << '(' << p.first << ", " << p.second << ')';
-    return s;
-}
 
 template <typename Tag, typename Value>
 struct DataFrame
