@@ -7,6 +7,7 @@ Compile this demo with
 #include <cassert>
 #include <initializer_list>
 #include <iostream>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -113,7 +114,7 @@ struct DataFrame<Tag, NoValue>
     std::vector<Tag> tags;
     struct PlaceHolderVector
     {
-        auto operator[](size_t i) const { return NoValue(); }
+        NoValue operator[](size_t i) const { return NoValue(); }
     } values;
 
     size_t size() const { return tags.size(); }
@@ -299,8 +300,7 @@ void test_first_tags()
     auto df = DataFrame<int, float>{{1, 2, 2, 3}, {10., 20., 100., 30.}};
     auto dft = first_tags(df);
 
-    // TODO: test for this.
-    // assert(dft.values[100] == NoValue());
+    assert((std::is_same<decltype(dft.values[100]), NoValue>::value));
     assert(dft.size() == 3);
 
     assert(dft.tags[0] == 1);
