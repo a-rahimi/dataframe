@@ -5,9 +5,10 @@ Dataframes are  datastructures that facilitate statistical operations on
 datasets. They borrow ideas from to the kinds of operations SQL facilitates for
 on-disk data.  Since their introduction to the S programming language in 1990,
 dataframes have been enhanced and cleaned up in many ways. For example, the R
-programming language introduced dplyr, which expands the semantics of data
-frames, Pandas implements dataframes for Python, and Polars implements them in
-Rust.
+programming language introduced [dplyr](http://dplyr.tidyverse.org), which
+expands the semantics of data frames, [Pandas](https://pandas.pydata.org)
+implements dataframes for Python, and [Polars](https://www.pola.rs) implements
+them in Rust.
 
 Traditionally, dataframes are two-dimensional tables, like tables in relational
 database, or like numerical matrices.  Unlike a matrix, each column of a
@@ -31,63 +32,71 @@ behavior. Some of these entry points even provide a mini-language of their own.
 
 This package implements a new, simplified dataframe in C++. Here were the overarching desgin goals:
 
-* To as much work at comile time as possible. The dataframes are statically typed, so
-  there is no overhead to represent schemas, or interpret datatypes at run-time.
+* To as much work at compile-time as possible. The dataframes are statically
+  typed so there is no overhead to represent schemas, or interpret datatypes at
+  run-time. Eventually, I'd like the query planning to happen at compile time as
+  well, but I haven't built complex-enough queries to warrant a query yet, let
+  alone one that runs at compile time.
 
 * Portable to new compute backends. Most of the operations reduce to a call to a
-  function called "merge", which does most of the work. Porting the package to a
-  new compute substrate, like a distributed system or a GPU would leave most of
-  the code intact, and port just the merge function.
+  function called "merge", which does most of the work. When porting the package to a
+  new compute substrate, like a distributed system or a GPU, most of
+  the code could be left intact. One would just port the merge function.
 
 * Simple semantics. The semantics of this package are slightly more complicated
-  than Polars, but significantly simpler than those in dplyr or Pandas.
+  than Polars, but significantly simpler than those of dplyr or Pandas.
 
 # How this package differs from other dataframe packages
 
-The semantics for these dataframes are simple to define an implement: almost all
-the operations rely on one workhorse function called "merge()", and they affect
-the behavior of merge by passing different reduction functions. A merge is a
-generalized a join operation between two dataframes, allowing the caller to
-specify through callbacks how matching rows are combined, and how to combine
-multiple rows that match. Inner joins, outer joins, selecting rows, and grouping
-operations are all implemented by calling merge() with slightly different
-callbacks.
+The semantics for these dataframes are simple to define an implement. Almost all
+the operations rely on one workhorse function called "merge()". The various
+operations affect the behavior of `merge` by passing different reduction
+functions. A "merge" genealizes a traditional join between two dataframes by
+allowing the caller to supply callbacks that change how rows that match between
+the two dataframes are combined, and how to combine multiple rows that match.
+Inner joins, outer joins, selecting rows, and grouping operations are all
+implemented by calling merge() with slightly different callbacks.
 
 Unlike traditional dataframes, this package does not take a position on row-wise
-vs columnar storage. The dataframe are 1D vectors.  When these are vectors of
-records, the dataframes behave like row-wise dataframes. When several vectors of
-scalars are combined in a C++ struct, they behave like a columnar store.
+vs columnar storage. Its dataframe are 1D vectors.  When the elements of these
+vectors are records, the dataframes behave like row-wise dataframes. When
+several vectors of scalars are combined in a C++ struct, they behave like a
+columnar store.
 
-This package borrows and modifies the notion of an index from SQL and Pandas,
-and they are involved in every operation the package implements, including join,
-groupby, and indexing. Each entry of a dataframe is tagged with a value. In the
-simplest case, these tags could be consecutive numbers so that the tag just
-represents the row id of the element.  But the tags of a dataframe can be any
-type so long as all entries of the dataframe have the same tag type. Joining two
-dataframes boils down to combining entries of two dataframes that have the same
-tag value. The groupby operation reduces all entries of a dataframe that have
-the same tag value. Select entries of a dataframe happens by collecting all
-entries that have a given set of tag values. 
+This package borrows and modifies the notion of an index from SQL and Pandas.
+These modified indices are called "tags", and they are involved in every
+operation the package implements, including join, groupby, and indexing. Each
+entry of a dataframe is tagged with a value. In the simplest case, these tags
+could be consecutive numbers so that the tag just represents the row id of the
+element.  But tags can be any type and take on any value so long as all entries
+of the dataframe have the same tag type. Joining two dataframes amounts to
+combining entries of two dataframes that have the same tag value. The groupby
+operation reduces all entries of a dataframe that have the same tag value.
+Select entries of a dataframe happens by collecting all entries that have a
+given set of tag values. 
 
 # Data types
 
 A dataframe is tuple of two vectors: and tag vector, and the values vector:
 
+```
 Vector<T> = [v[0], ...], where v[i: int]: T.
 DataFrame<Tag,T> = (tags: Vector<Tag>, values: Vector<T>)
+```
 
 We'll rely on some special subtypes of Vector to speed up certain operations. For example,
-
-Range = Vector<int>, which contains arithmetic sequences of integers. We'll use
+`Range = Vector<int>`, which contains arithmetic sequences of integers. We'll use
 these as the default tag vector.
 
 # Semantics
 
 ## General merge
 
+```
 left: DataFrame<Tag, Ta>
 right: DataFrame<Tag, Tg>
 c = merge(left, right, combine_left_right_op, accumulate_op): DataFrame<Tag, Top>
+```
 
 The functions `combine_left_right_op`  has signature
 
@@ -113,9 +122,11 @@ functions for `combine_left_right_op` and `accumulate`.
 
 ## Indexing 
 
+```
 a: DataFrame<Tag, Ta>
 b: DataFrame<Tag, Tb>
 c = a[b] : DataFrame[Tag, Ta]
+```
 
 Returns a dataframe consisting of rows of a that have the same tag as b.
 Duplicated tags in b result in duplicated tags in c. Duplicated tags in a result
@@ -136,9 +147,11 @@ Example:
 
 ## Inner Join 
 
+```
 a: DataFrame<Tag, Ta>
 b: DataFrame<Tag, Tb>
 c = a[b] : DataFrame[Tag, Ta]
+```
 
 Returns a dataframe consisting of rows of a and b that have the same tag.
 Duplicate values can be summed, or returned in pairs, or combined in any other
