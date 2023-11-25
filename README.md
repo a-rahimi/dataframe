@@ -20,11 +20,22 @@ rows or columns and computing summary statistics on these groups (similar to
 SQL's "GROUP BY"), or joining multiple dataframes by combining their rows
 whenever some of their match (similar to SQL's "JOIN").
 
-This package implements a new, simplified dataframe in C++. Dataframes in R and
-Python are primarily used for exploratory work, and secondarily for production.
-Since C++ is rarely used for exploratory work, these dataframes are meant to be
-used in production from the get-go.  Here were the overarching desgin goals of
-this package:
+This package implements a new, simplified dataframe in C++.
+
+# How this package differs from other dataframe packages
+
+ Dataframes in R and Python are helpful because they implement in native code
+ operations that would otherwise be slow in interpreted code. For example,
+ applying a user-supplied Python function to every row of a Pandas dataframe is
+ slow, so Pandas implements a huge variety of operations in native code to avoid
+ calling Python callbacks.  In C++, this is not an issue.  Applying a
+ user-supplied C++ lambda to every row of a dataframe is not any slower than
+ applying a built-in method. As such, a C++ dataframe library can be much
+ simpler. Another consideration is that C++ already provides excellent
+ facilities to manipulated structured data through structs, whereas in
+ interpreted languages, structured data are represented through dynamic data
+ structures that are slower to manipulated.  Here were the overarching desgin
+ goals of this package:
 
 * Do as much work at compile-time as possible. The dataframes are statically
   typed so there is no overhead to represent schemas, or interpret datatypes at
@@ -38,10 +49,8 @@ this package:
   the code could be left intact. One would just port the merge function.
 
 * Simple semantics. The semantics of this package are slightly more complicated
-  than Polars, but significantly simpler than those of dplyr or Pandas.
-
-
-# How this package differs from other dataframe packages
+  than Polars, which does not rely on a notion of a dataframe index, but
+  significantly simpler than those of dplyr or Pandas.
 
 Implementing a new dataframe library or porting one to a new compute engine (for
 example a distributed system, or a GPU) is a lot of work because  the algebra on
@@ -300,6 +309,6 @@ Here is a simple operation we can perform on this columnar data structure:
 auto toes_per_tooth = Join::collate(
     df.num_toes,
     df.num_teeth,
-    [](int num_toes, int num_teeth) { return float(num_toes) / num_teeth; }
+    [](int a, int b) { return float(a) / b; }
 );
 ```
