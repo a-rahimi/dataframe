@@ -70,7 +70,10 @@ operator<<(std::ostream &s, const DataFrame<Tag, Value> &df)
     return s;
 }
 
-struct IndexRange
+struct RangeTag;
+
+template <>
+struct std::vector<RangeTag>
 {
     size_t start, end, step;
 
@@ -78,30 +81,12 @@ struct IndexRange
     size_t operator[](size_t i) const { return start + i * step; }
 };
 
-struct RangeTag;
-
-// A dataframe with range tags.
-template <typename Value>
-struct DataFrame<RangeTag, Value>
+// DataFrames of type NoValue use a special version of std::vector that takes up
+// no space.
+template <>
+struct std::vector<NoValue>
 {
-    std::vector<Value> values;
-    IndexRange tags;
-
-    size_t size() const { return values.size(); }
-};
-
-// A dataframe with no values. Just tags. These are useful for indexing
-// operations, for example.
-template <typename Tag>
-struct DataFrame<Tag, NoValue>
-{
-    std::vector<Tag> tags;
-    struct PlaceHolderVector
-    {
-        NoValue operator[](size_t i) const { return NoValue(); }
-    } values;
-
-    size_t size() const { return tags.size(); }
+    NoValue operator[](size_t i) const { return NoValue(); }
 };
 
 template <typename Tag>
@@ -307,7 +292,7 @@ struct Join
 template <typename Tag, typename Value>
 DataFrame<Tag, NoValue> uniquify_tags(const DataFrame<Tag, Value> &df)
 {
-    auto df_out = DataFrame<Tag, NoValue>();
+    DataFrame<Tag, NoValue> df_out;
 
     if (!df.size())
         return df_out;
