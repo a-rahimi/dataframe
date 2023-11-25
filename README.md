@@ -1,36 +1,30 @@
 # Introduction
 
-
-Dataframes are  datastructures that facilitate statistical operations on
-datasets. They borrow ideas from to the kinds of operations SQL facilitates for
-on-disk data.  Since their introduction to the S programming language in 1990,
-dataframes have been enhanced and cleaned up in many ways. For example, the R
-programming language introduced [dplyr](http://dplyr.tidyverse.org), which
-expands the semantics of data frames, [Pandas](https://pandas.pydata.org)
-implements dataframes for Python, and [Polars](https://www.pola.rs) implements
-them in Rust.
+Dataframes are datastructures that facilitate statistical operations on
+datasets. They borrow ideas from data query languages like SQL , but they're
+data structures intended to be used inside a host programming language.  Since
+their introduction to the S programming language in 1990, dataframes have been
+enhanced and cleaned up in many ways. For example, the R programming language
+introduced [dplyr](http://dplyr.tidyverse.org), which expands the semantics of
+data frames, [Pandas](https://pandas.pydata.org) implements dataframes for
+Python, and [Polars](https://www.pola.rs) implements them in Rust.
 
 Traditionally, dataframes are two-dimensional tables, like tables in relational
-database, or like numerical matrices.  Unlike a matrix, each column of a
-dataframe may contain values of different types. Unlike traditional relationan
-databases, the table can be stored in columnar format (where each column is
-represented as a vector of homogenous type), or in row format, where each row is
-a heterogenous record.  Typical operations on a dataframe produce new dataframes
-by selecting subsets of rows or columns of these tables (similar to SQL's
-"SELECT"), grouping rows or columns and computing summary statistics on these
-groups (similar to SQL's "GROUP BY"), or joining multiple dataframes by
-combining their rows whenever some of their match (similar to SQL's "JOIN").
+database, or like numerical matrices.  Unlike a matrix, a dataframe may contain
+values of different types, and unlike traditional relational databases, the
+table can be stored in columnar format (where each column is represented as a
+vector of homogenous type), or in row format, where each row is a heterogenous
+record.  Typical operations on a dataframe produce new dataframes by selecting
+subsets of rows or columns of these tables (similar to SQL's "SELECT"), grouping
+rows or columns and computing summary statistics on these groups (similar to
+SQL's "GROUP BY"), or joining multiple dataframes by combining their rows
+whenever some of their match (similar to SQL's "JOIN").
 
-Implementing a new dataframe library or porting one to a new compute engine (for
-example a distributed system, or a GPU) is a lot of work because  the algebra on
-a traditional dataframe is surprisingly complicated.  For example [this
-analysis](https://escholarship.org/uc/item/9x5608wr) derives a dataframe API
-with 14 entry points. The API for R's dplyr dataframe package ostensibly has
-only four entry points (mutate, select, filter, summarize, arrange), but each
-entry point provides a plethora of options  that radically modify their
-behavior. Some of these entry points even provide a mini-language of their own.
-
-This package implements a new, simplified dataframe in C++. Here were the overarching desgin goals:
+This package implements a new, simplified dataframe in C++. Dataframes in R and
+Python are predominancly used for exploratory work, and secondarily for
+production. Since C++ is rarely used for exploratory work, these dataframes are
+meant to be used in production from the get-go.  Here were the overarching
+desgin goals of this package:
 
 * Do as much work at compile-time as possible. The dataframes are statically
   typed so there is no overhead to represent schemas, or interpret datatypes at
@@ -49,14 +43,24 @@ This package implements a new, simplified dataframe in C++. Here were the overar
 
 # How this package differs from other dataframe packages
 
-The semantics for these dataframes are simple to define an implement. Almost all
-the operations rely on one workhorse function called "merge()". The various
-operations affect the behavior of `merge` by passing different reduction
-functions. A "merge" genealizes a traditional join between two dataframes by
-allowing the caller to supply callbacks that change how rows that match between
-the two dataframes are combined, and how to combine multiple rows that match.
-Inner joins, outer joins, selecting rows, and grouping operations are all
-implemented by calling merge() with slightly different callbacks.
+Implementing a new dataframe library or porting one to a new compute engine (for
+example a distributed system, or a GPU) is a lot of work because  the algebra on
+a traditional dataframe is surprisingly complicated.  For example [this
+analysis](https://escholarship.org/uc/item/9x5608wr) derives a dataframe API
+with 14 entry points. The API for R's dplyr dataframe package ostensibly has
+only four entry points (mutate, select, filter, summarize, arrange), but each
+entry point provides a plethora of options  that radically modify their
+behavior. Some of these entry points even provide a mini-language of their own.
+
+The semantics for the dataframes implemented in this package are simple to
+define an implement. Almost all the operations rely on one workhorse function
+called "merge()". The various operations affect the behavior of `merge` by
+passing different reduction functions. A "merge" genealizes a traditional join
+between two dataframes by allowing the caller to supply callbacks that change
+how rows that match between the two dataframes are combined, and how to combine
+multiple rows that match.  Inner joins, outer joins, selecting rows, and
+grouping operations are all implemented by calling merge() with slightly
+different callbacks.
 
 Unlike traditional dataframes, this package does not take a position on row-wise
 vs columnar storage. Its dataframe are 1D vectors.  When the elements of these
@@ -80,73 +84,88 @@ values.
 
 # Data types
 
-A dataframe is tuple of two vectors: a tag vector, and the values vector:
+A dataframe is tuple of two vectors: a tag vector, and a values vector:
 
 ```
-DataFrame<Tag, T> = (tags: Vector<Tag>, values: Vector<T>)
+DataFrame<Tag, T> = (tags: std::vector<Tag>, values: std::vector<T>)
 ```
 
-We'll rely on some special subtypes of Vector to speed up certain operations.
-For example, `Vector<Range>`, represents an arithmetic sequence of integers and
-is used to represent  the default tags. This vector doesn't actually store the
-values of these sequences. The merge operation follows an accelerated path in
-these cases.
+We'll rely on some special subtypes of `std::vector` to speed up certain
+operations.  For example, `std::vector<Range>`, represents an arithmetic
+sequence of integers and is used to represent  the default tags. This vector
+doesn't actually store the values of these sequences. Instead, it computes them
+as needed. The merge operation follows an accelerated path in these cases.
 
-# Semantics
+# Dataframe Semantics
 
 ## General merge
 
+The main workhorse of these dataframes is the merge function:
+
 ```
 left: DataFrame<Tag, Ta>
-right: DataFrame<Tag, Tg>
-c = merge(left, right, combine_left_right_op, accumulate_op): DataFrame<Tag, Top>
+right: DataFrame<Tag, Tb>
+merged: DataFrame<Tag, Tc>
+
+merged = merge(left, right, combine_left_right_op, accumulate_op)
 ```
 
 The functions `combine_left_right_op`  has signature
 
-(tag_left: Union[Tag, NoTag], tag_right: Union[Tag, NoTag], v_left: TLeft,  v_right: TRight) -> Tag, Tout
+(tag_left: Union[Tag, NoTag], tag_right: Union[Tag, NoTag], v_left: TLeft,  v_right: TRight) -> (Tag, Tout)
 
 It is called on every tag `t` in union(a,b), so that 
 
-   (taga=t or taga:NoTag) and (tagb=t or tagb:NoTag).
+```
+(taga=t or taga:NoTag) and (tagb=t or tagb:NoTag).
+```
 
 It returns the result of the rows that have matching tags.
 
-The function `accumulate` has signature signature
+The function `accumulate` has signature
 
+```
 (tag_accumulation: Tag, v_accumulation: Tacc,  value_left: TLeft) -> Tag, Tout
+```
 
-It ise used to merge rows of the left dataframe that have the same value after
+It is used to merge rows of the left dataframe that have the same value after
 they've been merged with the right dataframe.
 
-If the tag returned by `combine_left_right_op` or `accumulate` have type NoTag, the result is not saved in c.
+If the tag returned by `combine_left_right_op` or `accumulate` have type NoTag,
+the result is not saved in the output dataframe.
 
 All operations below are implemented in terms of merge by passing different
 functions for `combine_left_right_op` and `accumulate`.
 
 ## Indexing 
 
+DataFrames can be sliced and indexed similarly to how matrices can be indexed in
+numerical packages like [Eigen](https://eigen.tuxfamily.org/) or
+[numpy](http://numpy.org):
+
 ```
 a: DataFrame<Tag, Ta>
 b: DataFrame<Tag, Tb>
-c = a[b] : DataFrame[Tag, Ta]
+c: DataFrame[Tag, Ta]
+
+c = a[b] 
 ```
 
-Returns a dataframe consisting of rows of a that have the same tag as b.
-Duplicated tags in b result in duplicated tags in c. Duplicated tags in a result
-in undefined behavior (in reality, they get summed, but this will likely change
-in the future).
+The above computes a dataframe that consists of rows of `a` that have the same
+tag as `b`.  Duplicated tags in `b` result in duplicated tags in `c`. Duplicated
+tags in `a` result in undefined behavior (in reality, they get summed, but this
+will likely change in the future).
 
 Example:
 ```
-    // A dataframe with tags 1...4, and values 10...40 in steps of 10.
-    auto df = DataFrame<int, float>{.tags={1, 2, 3, 4}, .values={10., 20., 30., 40.}};
+// A dataframe with tags 1...4, and values 10...40 in steps of 10.
+auto df = DataFrame<int, float>{.tags={1, 2, 3, 4}, .values={10., 20., 30., 40.}};
 
-    // A dataframe with tags 2, 3, and values that will be ignored.
-    auto i = DataFrame<int, float>{.tags={2, 3}, .values={-20., -30.}};
+// A dataframe with tags 2, 3, and values that will be ignored when indexing.
+auto i = DataFrame<int, float>{.tags={2, 3}, .values={-20., -30.}};
 
-    // g has two entries, with tags 2 and 3 and values 20. and 30.
-    auto g = df[i];
+// g has two entries, with tags 2 and 3 and values 20. and 30.
+auto g = df[i];
 ```
 
 ## Inner Join 
@@ -184,11 +203,17 @@ c = a[b] : DataFrame[Tag, Ta]
 
 ## Grouping
 
-a: DataFrame<Tag, T>
-b = group(a, reduction): DataFrame<Tag, Tacc>
+The grouping operation is similar to groupby in SQL and traditional dataframes, except that the group ids must be the tags of the dataframe:
 
-Apply the reduction function to all entries of a that have the same tag. The
-resulting dataframe has one row per unique tag in a, and the corresponding entry
+```
+a: DataFrame<Tag, T>
+b: DataFrame<Tag, Tacc>
+
+b = Group::sum(a)
+```
+
+This applies the reduction `sum` to all entries of `a` that have the same tag. The
+resulting dataframe has one row per unique tag in `a`, and the corresponding entry
 is the result of the reduction.
 
 ```
