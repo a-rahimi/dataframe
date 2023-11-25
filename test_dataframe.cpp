@@ -166,7 +166,9 @@ void test_join_simple_pair()
     auto df1 = DataFrame<int, float>{{1, 2, 3}, {10., 20., 30.}};
     auto df2 = DataFrame<int, float>{{1, 2, 3}, {-11., -22., -33.}};
 
-    auto g = Join::pair(df1, df2);
+    auto g = Join::collate(df1, df2,
+                           [](float v1, float v2)
+                           { return std::pair(v1, v2); });
 
     assert(g.size() == 3);
     assert(g.tags[0] == 1);

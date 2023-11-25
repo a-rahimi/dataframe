@@ -5,13 +5,6 @@
 #include <utility>
 #include <vector>
 
-template <typename T1, typename T2>
-std::ostream &operator<<(std::ostream &s, const std::pair<T1, T2> &p)
-{
-    s << '(' << p.first << ", " << p.second << ')';
-    return s;
-}
-
 struct NoTag
 {
 };
@@ -290,15 +283,6 @@ struct Join
             Tag(), Value1(), Value2());
         return merge(df1, df2, collate_op, collate_op);
     }
-    template <typename Tag, typename Value1, typename Value2>
-    static auto divide(const DataFrame<Tag, Value1> &df1, const DataFrame<Tag, Value2> &df2)
-    {
-        auto collate_op = ReductionAdaptor(
-            [](Value1 v1, Value2 v2)
-            { return v1 / v2; },
-            Tag(), Value1(), Value2());
-        return merge(df1, df2, collate_op, collate_op);
-    }
 
     template <typename Tag, typename Value1>
     static auto sum(const DataFrame<Tag, Value1> &df1, const DataFrame<Tag, NoValue> &df2)
@@ -307,16 +291,6 @@ struct Join
             [](Value1 v1, Value1 va)
             { return v1 + va; },
             Tag(), Value1(), NoValue());
-        return merge(df1, df2, collate_op, collate_op);
-    }
-
-    template <typename Tag, typename Value1, typename Value2>
-    static auto pair(const DataFrame<Tag, Value1> &df1, const DataFrame<Tag, Value2> &df2)
-    {
-        auto collate_op = CollateAdaptor(
-            [](Value1 v1, Value2 v2)
-            { return std::pair(v1, v2); },
-            Tag(), Value1(), Value2());
         return merge(df1, df2, collate_op, collate_op);
     }
 
