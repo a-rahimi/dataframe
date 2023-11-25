@@ -45,9 +45,6 @@ struct DataFrame
     std::vector<Tag> tags;
     std::vector<Value> values;
 
-    DataFrame(Tag, Value) {}
-    DataFrame(std::initializer_list<Tag> t, std::initializer_list<Value> v) : tags(t), values(v) {}
-
     size_t size() const { return tags.size(); }
 
     template <typename ValueOther>
@@ -129,7 +126,8 @@ template <typename Merge12Op, typename AccumulateOp, typename Tag, typename Valu
 static auto
 merge(const DataFrame<Tag, Value1> &df1, const DataFrame<Tag, Value2> &df2, Merge12Op merge_12, AccumulateOp accumulate)
 {
-    auto df_out = DataFrame(Tag(), merge_12(Tag(), Tag(), Value1(), Value2()).second);
+    using ValueOut = decltype(merge_12(Tag(), Tag(), Value1(), Value2()).second);
+    DataFrame<Tag, ValueOut> df_out;
 
     size_t i1 = 0, i2 = 0;
 
@@ -222,28 +220,33 @@ struct JoinSumOp<Tag, Value1, NoValue>
     }
 };
 
-template <typename Tag, typename Value1, typename Value2>
-struct JoinPairOp
+template <typename CollateOp, typename Tag, typename Value1, typename Value2>
+struct CollateAdaptor
 {
-    // The default behavior when combining pairs.
+
+    CollateOp op;
+    using ValueAccumulation = decltype(op(Value1(), Value2()));
+    CollateAdaptor(CollateOp _op, Tag, Value1, Value2) : op(_op) {}
+
+    // The default behavior when combining rows is to not merge.
     template <typename T1, typename T2, typename V1, typename V2>
-    auto operator()(T1 tag1, T2 tag2, V1 v1, V2 v2)
+    auto operator()(T1, T2, V1, V2 v2)
     {
         return std::pair(NoTag(), v2);
     }
 
-    // Combining a Value1 and a Value2.
+    // Combining a Value1 and a Value2 when tags match.
     template <>
-    auto operator()(Tag tag1, Tag tag2, Value1 v1, Value2 v2)
+    auto operator()(Tag tag1, Tag, Value1 v1, Value2 v2)
     {
-        return std::pair(tag1, std::pair(v1, v2));
+        return std::pair(tag1, op(v1, v2));
     }
 
-    // Combining a Pair with another Pair results in a flat pair. Notably, it does not result
+    // Accumulating results does nothing.
     template <>
-    auto operator()(Tag tag1, Tag tag2, Value1 v1, std::pair<Value1, Value2> v2)
+    auto operator()(Tag tag1, Tag, Value1 v1, ValueAccumulation acc)
     {
-        return std::pair(tag1, std::pair(v1, v2.second));
+        return std::pair(tag1, acc);
     }
 };
 
@@ -258,7 +261,18 @@ struct Join
     template <typename Tag, typename Value1, typename Value2>
     static auto pair(const DataFrame<Tag, Value1> &df1, const DataFrame<Tag, Value2> &df2)
     {
-        return merge(df1, df2, JoinPairOp<Tag, Value1, Value2>(), JoinPairOp<Tag, Value1, Value2>());
+        auto collate_op = CollateAdaptor(
+            [](Value1 v1, Value2 v2)
+            { return std::pair(v1, v2); },
+            Tag(), Value1(), Value2());
+        return merge(df1, df2, collate_op, collate_op);
+    }
+
+    template <typename Tag, typename Value1, typename Value2, typename CollateOp>
+    static auto collate(const DataFrame<Tag, Value1> &df1, const DataFrame<Tag, Value2> &df2, CollateOp op)
+    {
+        auto adapted_op = CollateAdaptor(op, Tag(), Value1(), Value2());
+        return merge(df1, df2, adapted_op, adapted_op);
     }
 };
 

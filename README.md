@@ -32,7 +32,7 @@ behavior. Some of these entry points even provide a mini-language of their own.
 
 This package implements a new, simplified dataframe in C++. Here were the overarching desgin goals:
 
-* To as much work at compile-time as possible. The dataframes are statically
+* Do as much work at compile-time as possible. The dataframes are statically
   typed so there is no overhead to represent schemas, or interpret datatypes at
   run-time. Eventually, I'd like the query planning to happen at compile time as
   well, but I haven't built complex-enough queries to warrant a query yet, let
@@ -45,6 +45,7 @@ This package implements a new, simplified dataframe in C++. Here were the overar
 
 * Simple semantics. The semantics of this package are slightly more complicated
   than Polars, but significantly simpler than those of dplyr or Pandas.
+
 
 # How this package differs from other dataframe packages
 
@@ -64,29 +65,32 @@ several vectors of scalars are combined in a C++ struct, they behave like a
 columnar store.
 
 This package borrows and modifies the notion of an index from SQL and Pandas.
-These modified indices are called "tags", and they are involved in every
-operation the package implements, including join, groupby, and indexing. Each
-entry of a dataframe is tagged with a value. In the simplest case, these tags
-could be consecutive numbers so that the tag just represents the row id of the
-element.  But tags can be any type and take on any value so long as all entries
-of the dataframe have the same tag type. Joining two dataframes amounts to
-combining entries of two dataframes that have the same tag value. The groupby
-operation reduces all entries of a dataframe that have the same tag value.
-Select entries of a dataframe happens by collecting all entries that have a
-given set of tag values. 
+These indices are called "tags" here, and they are involved in every operation
+the package implements, including join, groupby, and indexing. Each entry of a
+dataframe is tagged with a value. In the simplest case, these tags are
+consecutive numbers so that the tag just represents the row id of the element.
+This case compiles down to the fastest path, where operations on dataframes are
+as fast as operations with fast linear algebra packages.  But more generally,
+tags can more be any type and take on any value so long as all entries of the
+dataframe have the same tag type. Joining two dataframes amounts to combining
+entries of two dataframes that have the same tag value. The groupby operation
+reduces all entries of a dataframe that have the same tag value.  Select entries
+of a dataframe happens by collecting all entries that have a given set of tag
+values. 
 
 # Data types
 
-A dataframe is tuple of two vectors: and tag vector, and the values vector:
+A dataframe is tuple of two vectors: a tag vector, and the values vector:
 
 ```
-Vector<T> = [v[0], ...], where v[i: int]: T.
-DataFrame<Tag,T> = (tags: Vector<Tag>, values: Vector<T>)
+DataFrame<Tag, T> = (tags: Vector<Tag>, values: Vector<T>)
 ```
 
-We'll rely on some special subtypes of Vector to speed up certain operations. For example,
-`Range = Vector<int>`, which contains arithmetic sequences of integers. We'll use
-these as the default tag vector.
+We'll rely on some special subtypes of Vector to speed up certain operations.
+For example, `Vector<Range>`, represents an arithmetic sequence of integers and
+is used to represent  the default tags. This vector doesn't actually store the
+values of these sequences. The merge operation follows an accelerated path in
+these cases.
 
 # Semantics
 
@@ -136,10 +140,10 @@ in the future).
 Example:
 ```
     // A dataframe with tags 1...4, and values 10...40 in steps of 10.
-    auto df = DataFrame<int, float>{{1, 2, 3, 4}, {10., 20., 30., 40.}};
+    auto df = DataFrame<int, float>{.tags={1, 2, 3, 4}, .values={10., 20., 30., 40.}};
 
     // A dataframe with tags 2, 3, and values that will be ignored.
-    auto i = DataFrame<int, float>{{2, 3}, {-20., -30.}};
+    auto i = DataFrame<int, float>{.tags={2, 3}, .values={-20., -30.}};
 
     // g has two entries, with tags 2 and 3 and values 20. and 30.
     auto g = df[i];
@@ -159,21 +163,23 @@ way specified by the join operation.
 
 Example:
 ```
-    auto df1 = DataFrame<int, float>{{1, 2, 3}, {10., 20., 30.}};
-    auto df2 = DataFrame<int, float>{{1, 2, 3}, {-11., -22., -33.}};
+auto df1 = DataFrame<int, float>{.tags={1, 2, 3}, .values={10., 20., 30.}};
+auto df2 = DataFrame<int, float>{.tags={1, 2, 3}, .values={-11., -22., -33.}};
 
-    // g has tags 1,2,3 and values -1, -2, -3.
-    auto g = Join::sum(df1, df2);
+// g has tags 1,2,3 and values -1, -2, -3.
+auto g = Join::sum(df1, df2);
 
-    // gp has tags 1,2,3 and values pair(10,-11), pair(20,-22), pair(30,-33).
-    auto gp = Join::pair(df1, df2)
+// gp has tags 1,2,3 and values pair(10,-11), pair(20,-22), pair(30,-33).
+auto gp = Join::pair(df1, df2)
 ```
 
 ## Outer Join 
 
+```
 a: DataFrame<Tag, Ta>
 b: DataFrame<Tag, Tb>
 c = a[b] : DataFrame[Tag, Ta]
+```
 
 
 ## Grouping
@@ -186,8 +192,8 @@ resulting dataframe has one row per unique tag in a, and the corresponding entry
 is the result of the reduction.
 
 ```
-    auto df = DataFrame<int, float>{{1, 2, 2, 3}, {10., 20., 100., 30.}};
+auto df = DataFrame<int, float>{.tags={1, 2, 2, 3}, .values={10., 20., 100., 30.}};
 
-    // g has tags 1,2,3 and values 10, 120, 30.
-    auto g = Group::sum(df);
+// g has tags 1,2,3 and values 10, 120, 30.
+auto g = Group::sum(df);
 ```

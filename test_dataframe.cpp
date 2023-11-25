@@ -4,6 +4,62 @@ Compile this demo with
     clang++ -Wall -std=c++2b  test_dataframe.cpp
 */
 #include "dataframe.h"
+#include <string>
+
+struct O1
+{
+    std::string favorite_color;
+    int num_toes;
+};
+struct O2
+{
+    int num_teeth;
+};
+
+struct O3 : O1, O2
+{
+    O3(const O1 &o1, const O2 &o2) : O1(o1), O2(o2) {}
+    bool operator==(const O3 &o3) const
+    {
+        return (o3.favorite_color == favorite_color) && (o3.num_toes == num_toes) && (o3.num_teeth == num_teeth);
+    }
+};
+
+std::ostream &operator<<(std::ostream &s, const O3 &o3)
+{
+    s << "O3(" << o3.favorite_color << ", " << o3.num_toes << ", " << o3.num_teeth << ')';
+    return s;
+}
+
+void test_join_structs()
+{
+    auto df1 = DataFrame<std::string, O1>{
+        {"ali", "john"},
+        {O1{.favorite_color = "green", .num_toes = 6}, O1{.favorite_color = "blue", .num_toes = 10}}};
+
+    auto df2 = DataFrame<std::string, O2>{
+        {"ali", "john"},
+        {O2{.num_teeth = 18}, O2{.num_teeth = 32}}};
+
+    auto g = Join::collate(df1, df2,
+                           [](const O1 &left, const O2 &right)
+                           { return O3(left, right); });
+
+    assert(g.tags == df1.tags);
+    assert(g.values[0] == O3(O1{"green", 6}, O2{18}));
+    assert(g.values[1] == O3(O1{"blue", 10}, O2{32}));
+}
+
+void test_join_strings()
+{
+    auto df1 = DataFrame<std::string, float>{{"ali", "john"}, {1., 2.}};
+    auto df2 = DataFrame<std::string, float>{{"ali", "john"}, {10., 20.}};
+
+    auto g = Join::sum(df1, df2);
+
+    assert(g.tags == df1.tags);
+    assert(g.values == std::vector<float>({11., 22.}));
+}
 
 void test_first_tags()
 {
@@ -34,8 +90,8 @@ void test_group_sum()
 
 void test_join_simple()
 {
-    auto df1 = DataFrame<int, float>{{1, 2, 3}, {10., 20., 30.}};
-    auto df2 = DataFrame<int, float>{{1, 2, 3}, {-11., -22., -33.}};
+    auto df1 = DataFrame<int, float>{.tags = {1, 2, 3}, .values = {10., 20., 30.}};
+    auto df2 = DataFrame<int, float>{.tags = {1, 2, 3}, .values = {-11., -22., -33.}};
 
     auto g = Join::sum(df1, df2);
 
@@ -68,8 +124,8 @@ void test_join_duplicates_left()
 
 void test_join_binary()
 {
-    auto df1 = DataFrame<int, float>{{0, 0, 1}, {10., 20., 30.}};
-    auto df2 = DataFrame<int, float>{{0, 1, 1}, {-11., -22., -33.}};
+    auto df1 = DataFrame<int, float>{.tags = {0, 0, 1}, .values = {10., 20., 30.}};
+    auto df2 = DataFrame<int, float>{.tags = {0, 1, 1}, .values = {-11., -22., -33.}};
 
     auto g = Join::sum(df1, df2);
 
@@ -100,9 +156,9 @@ void test_join_simple_pair()
 
 void test_index()
 {
-    auto df = DataFrame<int, float>{{1, 2, 3, 4}, {10., 20., 30., 40.}};
+    auto df = DataFrame<int, float>{.tags = {1, 2, 3, 4}, .values = {10., 20., 30., 40.}};
 
-    auto i = DataFrame<int, float>{{2, 3}, {-20., -30.}};
+    auto i = DataFrame<int, float>{.tags = {2, 3}, .values = {-20., -30.}};
 
     auto g = df[i];
 
@@ -116,9 +172,9 @@ void test_index()
 
 void test_index_no_values()
 {
-    auto df = DataFrame<int, float>{{1, 2, 3, 4}, {10., 20., 30., 40.}};
+    auto df = DataFrame<int, float>{.tags = {1, 2, 3, 4}, .values = {10., 20., 30., 40.}};
 
-    auto i = DataFrame<int, NoValue>{{2, 3}};
+    auto i = DataFrame<int, NoValue>{.tags = {2, 3}};
 
     auto g = df[i];
 
@@ -132,6 +188,8 @@ void test_index_no_values()
 
 int main()
 {
+    test_join_structs();
+    test_join_strings();
     test_first_tags();
     test_group_sum();
     test_index_no_values();
