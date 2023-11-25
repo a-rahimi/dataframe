@@ -21,10 +21,10 @@ SQL's "GROUP BY"), or joining multiple dataframes by combining their rows
 whenever some of their match (similar to SQL's "JOIN").
 
 This package implements a new, simplified dataframe in C++. Dataframes in R and
-Python are predominancly used for exploratory work, and secondarily for
-production. Since C++ is rarely used for exploratory work, these dataframes are
-meant to be used in production from the get-go.  Here were the overarching
-desgin goals of this package:
+Python are primarily used for exploratory work, and secondarily for production.
+Since C++ is rarely used for exploratory work, these dataframes are meant to be
+used in production from the get-go.  Here were the overarching desgin goals of
+this package:
 
 * Do as much work at compile-time as possible. The dataframes are statically
   typed so there is no overhead to represent schemas, or interpret datatypes at
@@ -236,7 +236,8 @@ struct O1
 
 auto df1 = DataFrame<std::string, O1>{
     {"ali", "john"},
-    {O1{.favorite_color = "green", .num_toes = 6}, O1{.favorite_color = "blue", .num_toes = 10}}};
+    {O1{.favorite_color = "green", .num_toes = 6}, O1{.favorite_color = "blue", .num_toes = 10}}
+};
 
 
 struct O2
@@ -259,9 +260,10 @@ struct O3 : O1, O2
 };
 
 // g is a dataframe whose elements on of type O3.
-auto g = Join::collate(df1, df2,
-                        [](const O1 &left, const O2 &right)
-                        { return O3(left, right); });
+auto g = Join::collate(
+    df1, df2, [](const O1 &left, const O2 &right) { return O3(left, right); }
+);
+
 assert(g.tags == df1.tags);
 assert(g.values[0] == O3(O1{"green", 6}, O2{18}));
 assert(g.values[1] == O3(O1{"blue", 10}, O2{32}));
@@ -272,18 +274,17 @@ assert(g.values[1] == O3(O1{"blue", 10}, O2{32}));
 The example below represents the above dataset in a columnar format:
 
 ```
+auto tags = std::vector<std::string>{"ali", "john"};
+
 struct Columnar
 {
     DataFrame<std::string, std::string> favorite_color;
     DataFrame<std::string, int> num_toes;
     DataFrame<std::string, int> num_teeth;
-};
-
-auto tags = std::vector<std::string>{"ali", "john"};
-auto df = Columnar{
-    .favorite_color = {tags, {"green", "blue"}},
-    .num_toes = {tags, {6, 10}},
-    .num_teeth = {tags, {18, 32}}
+} df {
+    {tags, {"green", "blue"}},
+    {tags, {6, 10}},
+    {tags, {18, 32}}
 };
 ```
 
@@ -294,9 +295,11 @@ fields because there is no mechanism yet to share tags (an upcoming feature).
 Here is a simple operation we can perform on this columnar data structure:
 
 ```
-auto toes_per_tooth = Join::collate(df.num_toes,
-                                    df.num_teeth,
-                                    [](int num_toes, int num_teeth) {
-                                       return float(num_toes) / num_teeth;
-                                   });
+// A float-valued dataframe that computes the ratio of teeth to toes for each
+// row of the columnar dataframe above.
+auto toes_per_tooth = Join::collate(
+    df.num_toes,
+    df.num_teeth,
+    [](int num_toes, int num_teeth) { return float(num_toes) / num_teeth; }
+);
 ```

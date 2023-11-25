@@ -6,20 +6,19 @@ Compile this demo with
 #include "dataframe.h"
 #include <string>
 
-struct Columnar
-{
-    DataFrame<std::string, std::string> favorite_color;
-    DataFrame<std::string, int> num_toes;
-    DataFrame<std::string, int> num_teeth;
-};
-
 void test_columnar()
 {
     auto tags = std::vector<std::string>{"ali", "john"};
-    auto df = Columnar{
-        .favorite_color = {tags, {"green", "blue"}},
-        .num_toes = {tags, {6, 10}},
-        .num_teeth = {tags, {18, 32}}};
+
+    struct Columnar
+    {
+        DataFrame<std::string, std::string> favorite_color;
+        DataFrame<std::string, int> num_toes;
+        DataFrame<std::string, int> num_teeth;
+    } df{
+        {tags, {"green", "blue"}},
+        {tags, {6, 10}},
+        {tags, {18, 32}}};
 
     auto toes_per_tooth = Join::collate(df.num_toes, df.num_teeth, [](int num_toes, int num_teeth)
                                         { return float(num_toes) / num_teeth; });
