@@ -187,34 +187,62 @@ merge(const DataFrame<Tag, Value1> &df1, const DataFrame<Tag, Value2> &df2, Merg
     return df_out;
 }
 
-template <typename Tag, typename Value1, typename Value2>
-struct JoinSumOp
+template <typename ReductionOp, typename Tag, typename Value1, typename Value2>
+struct ReductionAdaptor
 {
+    ReductionOp op;
+
+    using ValueAccumulation = decltype(op(Value1(), Value2()));
+
+    ReductionAdaptor(ReductionOp _op, Tag, Value1, Value2) : op(_op) {}
+
     // By default, joining generates a NoTag
     template <typename T1, typename T2, typename V1, typename V2>
-    auto operator()(T1 tag1, T2 tag2, V1 v1, V2 v2)
+    auto operator()(T1, T2, V1 v1, V2)
     {
         return std::pair(NoTag(), v1);
     }
+
     // Tags match and v1 and v2 have the expected type.
-    auto operator()(Tag tag1, Tag tag2, Value1 v1, Value2 v2)
+    template <>
+    auto operator()(Tag tag1, Tag, Value1 v1, Value2 v2)
     {
-        return std::pair(tag1, v1 + v2);
+        return std::pair(tag1, op(v1, v2));
+    }
+
+    // Tags match and v1 has the expected type and v2 is the accumulation type
+    template <>
+    auto operator()(Tag tag1, Tag, Value1 v1, ValueAccumulation va)
+    {
+        return std::pair(tag1, op(v1, va));
     }
 };
 
-template <typename Tag, typename Value1>
-struct JoinSumOp<Tag, Value1, NoValue>
+template <typename ReductionOp, typename Tag, typename Value1>
+struct ReductionAdaptor<ReductionOp, Tag, Value1, NoValue>
 {
+    ReductionOp op;
+
+    using ValueAccumulation = decltype(op(Value1(), Value1()));
+
+    ReductionAdaptor(ReductionOp _op, Tag, Value1, NoValue) : op(_op) {}
+
     // By default, joining generates a NoTag
     template <typename T1, typename T2, typename V1, typename V2>
-    auto operator()(T1 tag1, T2 tag2, V1 v1, V2 v2)
+    auto operator()(T1, T2, V1 v1, V2)
     {
         return std::pair(NoTag(), v1);
     }
 
+    // Tags match and v1 has the expected type and v2 is the accumulation type
+    template <>
+    auto operator()(Tag tag1, Tag, Value1 v1, ValueAccumulation va)
+    {
+        return std::pair(tag1, op(v1, va));
+    }
+
     // Tags match but v2 is NoValue().
-    auto operator()(Tag tag1, Tag tag2, Value1 v1, NoValue v2)
+    auto operator()(Tag tag1, Tag, Value1 v1, NoValue)
     {
         return std::pair(tag1, v1);
     }
@@ -223,9 +251,10 @@ struct JoinSumOp<Tag, Value1, NoValue>
 template <typename CollateOp, typename Tag, typename Value1, typename Value2>
 struct CollateAdaptor
 {
-
     CollateOp op;
+
     using ValueAccumulation = decltype(op(Value1(), Value2()));
+
     CollateAdaptor(CollateOp _op, Tag, Value1, Value2) : op(_op) {}
 
     // The default behavior when combining rows is to not merge.
@@ -255,7 +284,30 @@ struct Join
     template <typename Tag, typename Value1, typename Value2>
     static auto sum(const DataFrame<Tag, Value1> &df1, const DataFrame<Tag, Value2> &df2)
     {
-        return merge(df1, df2, JoinSumOp<Tag, Value1, Value2>(), JoinSumOp<Tag, Value1, Value1>());
+        auto collate_op = ReductionAdaptor(
+            [](Value1 v1, Value2 v2)
+            { return v1 + v2; },
+            Tag(), Value1(), Value2());
+        return merge(df1, df2, collate_op, collate_op);
+    }
+    template <typename Tag, typename Value1, typename Value2>
+    static auto divide(const DataFrame<Tag, Value1> &df1, const DataFrame<Tag, Value2> &df2)
+    {
+        auto collate_op = ReductionAdaptor(
+            [](Value1 v1, Value2 v2)
+            { return v1 / v2; },
+            Tag(), Value1(), Value2());
+        return merge(df1, df2, collate_op, collate_op);
+    }
+
+    template <typename Tag, typename Value1>
+    static auto sum(const DataFrame<Tag, Value1> &df1, const DataFrame<Tag, NoValue> &df2)
+    {
+        auto collate_op = ReductionAdaptor(
+            [](Value1 v1, Value1 va)
+            { return v1 + va; },
+            Tag(), Value1(), NoValue());
+        return merge(df1, df2, collate_op, collate_op);
     }
 
     template <typename Tag, typename Value1, typename Value2>

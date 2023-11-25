@@ -62,7 +62,7 @@ Unlike traditional dataframes, this package does not take a position on row-wise
 vs columnar storage. Its dataframe are 1D vectors.  When the elements of these
 vectors are records, the dataframes behave like row-wise dataframes. When
 several vectors of scalars are combined in a C++ struct, they behave like a
-columnar store.
+columnar store. See the section below for details.
 
 This package borrows and modifies the notion of an index from SQL and Pandas.
 These indices are called "tags" here, and they are involved in every operation
@@ -196,4 +196,82 @@ auto df = DataFrame<int, float>{.tags={1, 2, 2, 3}, .values={10., 20., 100., 30.
 
 // g has tags 1,2,3 and values 10, 120, 30.
 auto g = Group::sum(df);
+```
+
+# Example of row-wise dataframe storage
+
+The vignette below illustrates row-wise storage. We'll define two dataframes, each of whose elements is a struct:
+
+```
+struct O1
+{
+    std::string favorite_color;
+    int num_toes;
+};
+
+auto df1 = DataFrame<std::string, O1>{
+    {"ali", "john"},
+    {O1{.favorite_color = "green", .num_toes = 6}, O1{.favorite_color = "blue", .num_toes = 10}}};
+
+
+struct O2
+{
+    int num_teeth;
+};
+
+auto df2 = DataFrame<std::string, O2>{
+    {"ali", "john"},
+    {O2{.num_teeth = 18}, O2{.num_teeth = 32}}
+};
+```
+
+We can join these two dataframes on their tags to obtain a third dataframe whose elements are a third kind of struct: 
+
+```
+struct O3 : O1, O2
+{
+    O3(const O1 &o1, const O2 &o2) : O1(o1), O2(o2) {}
+};
+
+// g is a dataframe whose elements on of type O3.
+auto g = Join::collate(df1, df2,
+                        [](const O1 &left, const O2 &right)
+                        { return O3(left, right); });
+assert(g.tags == df1.tags);
+assert(g.values[0] == O3(O1{"green", 6}, O2{18}));
+assert(g.values[1] == O3(O1{"blue", 10}, O2{32}));
+```
+
+# Example of columnar dataframe storage
+
+The example below represents the above dataset in a columnar format:
+
+```
+struct Columnar
+{
+    DataFrame<std::string, std::string> favorite_color;
+    DataFrame<std::string, int> num_toes;
+    DataFrame<std::string, int> num_teeth;
+};
+
+auto tags = std::vector<std::string>{"ali", "john"};
+auto df = Columnar{
+    .favorite_color = {tags, {"green", "blue"}},
+    .num_toes = {tags, {6, 10}},
+    .num_teeth = {tags, {18, 32}}
+};
+```
+
+Here, each field is a separate dataframe, and the dataframes are collected in a
+struct. In this particular example, the tags are replicated across the three
+fields because there is no mechanism yet to share tags (an upcoming feature).
+
+Here is a simple operation we can perform on this columnar data structure:
+
+```
+auto toes_per_tooth = Join::collate(df.num_toes,
+                                    df.num_teeth,
+                                    [](int num_toes, int num_teeth) {
+                                       return float(num_toes) / num_teeth;
+                                   });
 ```

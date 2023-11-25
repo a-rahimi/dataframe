@@ -6,6 +6,28 @@ Compile this demo with
 #include "dataframe.h"
 #include <string>
 
+struct Columnar
+{
+    DataFrame<std::string, std::string> favorite_color;
+    DataFrame<std::string, int> num_toes;
+    DataFrame<std::string, int> num_teeth;
+};
+
+void test_columnar()
+{
+    auto tags = std::vector<std::string>{"ali", "john"};
+    auto df = Columnar{
+        .favorite_color = {tags, {"green", "blue"}},
+        .num_toes = {tags, {6, 10}},
+        .num_teeth = {tags, {18, 32}}};
+
+    auto toes_per_tooth = Join::collate(df.num_toes, df.num_teeth, [](int num_toes, int num_teeth)
+                                        { return float(num_toes) / num_teeth; });
+    assert(toes_per_tooth.size() == 2);
+    assert(toes_per_tooth.values[0] == 6.f / 18);
+    assert(toes_per_tooth.values[1] == 10.f / 32);
+}
+
 struct O1
 {
     std::string favorite_color;
@@ -19,11 +41,12 @@ struct O2
 struct O3 : O1, O2
 {
     O3(const O1 &o1, const O2 &o2) : O1(o1), O2(o2) {}
-    bool operator==(const O3 &o3) const
-    {
-        return (o3.favorite_color == favorite_color) && (o3.num_toes == num_toes) && (o3.num_teeth == num_teeth);
-    }
 };
+
+bool operator==(const O3 &left, const O3 &right)
+{
+    return (left.favorite_color == right.favorite_color) && (left.num_toes == right.num_toes) && (left.num_teeth == right.num_teeth);
+}
 
 std::ostream &operator<<(std::ostream &s, const O3 &o3)
 {
@@ -188,6 +211,7 @@ void test_index_no_values()
 
 int main()
 {
+    test_columnar();
     test_join_structs();
     test_join_strings();
     test_first_tags();
