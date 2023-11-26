@@ -1,0 +1,17 @@
+# https://clang.llvm.org/docs/ClangFormatStyleOptions.html
+BasedOnStyle: Google
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 120
+AlignArrayOfStructures: Left
+AllowShortBlocksOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: All
+AllowShortLoopsOnASingleLine: False
+AlwaysBreakTemplateDeclarations: Yes
+BinPackArguments: False
+BinPackParameters: True
+ReflowComments: True
+RemoveSemicolon: True
+SortIncludes: CaseSensitive
