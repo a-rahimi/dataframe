@@ -60,7 +60,10 @@ Here are the overarching desgin goals of this package:
 
 * Simple semantics. The dataframe semantics in this package are slightly more
   complicated than those of Polars, which does not rely on a notion of an index, but
-  significantly simpler than those of dplyr or Pandas.
+  significantly simpler than those of dplyr or Pandas. The fact that most
+  operations reduce to merge() will hopefully also make it easy to optimize
+  query plans, because hopefully it's easier to reason about compositions of
+  merges than compositions of a large number of basic operations.
 
 Implementing a new dataframe library or porting one to a new compute engine (for
 example a distributed system, or a GPU) is a lot of work because the algebra on

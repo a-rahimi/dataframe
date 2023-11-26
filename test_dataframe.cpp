@@ -1,22 +1,25 @@
 /*
 Compile this demo with
 
-    clang++ -Wall -std=c++2b  test_dataframe.cpp
+   clang++ -Wall -std=c++2b  test_dataframe.cpp  -lgtest_main -lgtest
 */
-#include "dataframe.h"
 #include <string>
 
-void test_range_tags()
+#include <gtest/gtest.h>
+
+#include "dataframe.h"
+
+TEST(RangeTags, Simple)
 {
     auto df = DataFrame<RangeTag, int>{.tags = {0, 5}, .values = {-1, -2, -3, -4, -5}};
     auto i = DataFrame<size_t, NoValue>{{2, 3}};
     auto c = df[i];
 
-    assert((c.tags == std::vector<size_t>{2, 3}));
-    assert((c.values == std::vector<int>{-3, -4}));
+    EXPECT_EQ(c.tags, (std::vector<size_t>{2, 3}));
+    EXPECT_EQ(c.values, (std::vector<int>{-3, -4}));
 }
 
-void test_columnar()
+TEST(Columnar, Simple)
 {
     auto tags = std::vector<std::string>{"ali", "john"};
 
@@ -32,9 +35,9 @@ void test_columnar()
 
     auto toes_per_tooth = Join::collate(df.num_toes, df.num_teeth, [](int num_toes, int num_teeth)
                                         { return float(num_toes) / num_teeth; });
-    assert(toes_per_tooth.size() == 2);
-    assert(toes_per_tooth.values[0] == 6.f / 18);
-    assert(toes_per_tooth.values[1] == 10.f / 32);
+    EXPECT_EQ(toes_per_tooth.size(), 2);
+    EXPECT_EQ(toes_per_tooth.values[0], 6.f / 18);
+    EXPECT_EQ(toes_per_tooth.values[1], 10.f / 32);
 }
 
 struct O1
@@ -63,7 +66,7 @@ std::ostream &operator<<(std::ostream &s, const O3 &o3)
     return s;
 }
 
-void test_join_structs()
+TEST(Join, Structs)
 {
     auto df1 = DataFrame<std::string, O1>{
         {"ali", "john"},
@@ -77,100 +80,60 @@ void test_join_structs()
                            [](const O1 &left, const O2 &right)
                            { return O3(left, right); });
 
-    assert(g.tags == df1.tags);
-    assert(g.values[0] == O3(O1{"green", 6}, O2{18}));
-    assert(g.values[1] == O3(O1{"blue", 10}, O2{32}));
+    EXPECT_EQ(g.tags, df1.tags);
+    EXPECT_EQ(g.values[0], O3(O1{"green", 6}, O2{18}));
+    EXPECT_EQ(g.values[1], O3(O1{"blue", 10}, O2{32}));
 }
 
-void test_join_strings()
+TEST(Join, Strings)
 {
     auto df1 = DataFrame<std::string, float>{{"ali", "john"}, {1., 2.}};
     auto df2 = DataFrame<std::string, float>{{"ali", "john"}, {10., 20.}};
 
     auto g = Join::sum(df1, df2);
 
-    assert(g.tags == df1.tags);
-    assert(g.values == std::vector<float>({11., 22.}));
+    EXPECT_EQ(g.tags, df1.tags);
+    EXPECT_EQ(g.values, std::vector<float>({11., 22.}));
 }
 
-void test_first_tags()
-{
-    auto df = DataFrame<int, float>{{1, 2, 2, 3}, {10., 20., 100., 30.}};
-    auto dft = uniquify_tags(df);
-
-    assert((std::is_same<decltype(dft.values[100]), NoValue>::value));
-    assert(dft.size() == 3);
-
-    assert(dft.tags[0] == 1);
-    assert(dft.tags[1] == 2);
-    assert(dft.tags[2] == 3);
-}
-
-void test_group_sum()
-{
-    auto df = DataFrame<int, float>{{1, 2, 2, 3}, {10., 20., 100., 30.}};
-
-    auto g = Group::sum(df);
-
-    assert(g.tags[0] == 1);
-    assert(g.values[0] == 10.f);
-    assert(g.tags[1] == 2);
-    assert(g.values[1] == 120.f);
-    assert(g.tags[2] == 3);
-    assert(g.values[2] == 30.);
-}
-
-void test_join_simple()
+TEST(Join, Simple)
 {
     auto df1 = DataFrame<int, float>{.tags = {1, 2, 3}, .values = {10., 20., 30.}};
     auto df2 = DataFrame<int, float>{.tags = {1, 2, 3}, .values = {-11., -22., -33.}};
 
     auto g = Join::sum(df1, df2);
 
-    assert(g.size() == 3);
+    EXPECT_EQ(g.size(), 3);
 
-    assert(g.tags[0] == 1);
-    assert(g.values[0] == -1.f);
-    assert(g.tags[1] == 2);
-    assert(g.values[1] == -2.f);
-    assert(g.tags[2] == 3);
-    assert(g.values[2] == -3.f);
+    EXPECT_EQ(g.tags, (std::vector<int>{1, 2, 3}));
+    EXPECT_EQ(g.values, (std::vector<float>{-1., -2., -3.}));
 }
 
-void test_join_duplicates_left()
+TEST(Join, DuplicatesLeft)
 {
     auto df1 = DataFrame<int, float>{{1, 2, 2, 3}, {10., 20., 100., 30.}};
     auto df2 = DataFrame<int, float>{{1, 2, 3}, {-11., -22., -33.}};
 
     auto g = Join::sum(df1, df2);
 
-    assert(g.size() == 3);
+    EXPECT_EQ(g.size(), 3);
 
-    assert(g.tags[0] == 1);
-    assert(g.values[0] == -1.f);
-    assert(g.tags[1] == 2);
-    assert(g.values[1] == 98.f);
-    assert(g.tags[2] == 3);
-    assert(g.values[2] == -3.f);
+    EXPECT_EQ(g.tags, (std::vector<int>{1, 2, 3}));
+    EXPECT_EQ(g.values, (std::vector<float>{-1., 98., -3.}));
 }
-
-void test_join_binary()
+TEST(Join, Binary)
 {
     auto df1 = DataFrame<int, float>{.tags = {0, 0, 1}, .values = {10., 20., 30.}};
     auto df2 = DataFrame<int, float>{.tags = {0, 1, 1}, .values = {-11., -22., -33.}};
 
     auto g = Join::sum(df1, df2);
 
-    assert(g.size() == 3);
-    assert(g.tags[0] == 0);
-    assert(g.values[0] == 19.f);
-    assert(g.tags[1] == 1);
-    assert(g.values[1] == 8.f);
-    assert(g.tags[2] == 1);
-    assert(g.values[2] == 8.f);
+    EXPECT_EQ(g.size(), 3);
+    EXPECT_EQ(g.tags, (std::vector<int>{0, 1, 1}));
+    EXPECT_EQ(g.values, (std::vector<float>{19., 8., 8.}));
 }
 
-void test_join_simple_pair()
+TEST(Join, SimplePair)
 {
     auto df1 = DataFrame<int, float>{{1, 2, 3}, {10., 20., 30.}};
     auto df2 = DataFrame<int, float>{{1, 2, 3}, {-11., -22., -33.}};
@@ -179,16 +142,35 @@ void test_join_simple_pair()
                            [](float v1, float v2)
                            { return std::pair(v1, v2); });
 
-    assert(g.size() == 3);
-    assert(g.tags[0] == 1);
-    assert(g.values[0] == std::pair(10.f, -11.f));
-    assert(g.tags[1] == 2);
-    assert(g.values[1] == std::pair(20.f, -22.f));
-    assert(g.tags[2] == 3);
-    assert(g.values[2] == std::pair(30.f, -33.f));
+    EXPECT_EQ(g.size(), 3);
+    EXPECT_EQ(g.tags, (std::vector<int>{1, 2, 3}));
+    EXPECT_EQ(g.values[0], std::pair(10.f, -11.f));
+    EXPECT_EQ(g.values[1], std::pair(20.f, -22.f));
+    EXPECT_EQ(g.values[2], std::pair(30.f, -33.f));
 }
 
-void test_index()
+TEST(Utilities, first_tags)
+{
+    auto df = DataFrame<int, float>{{1, 2, 2, 3}, {10., 20., 100., 30.}};
+    auto dft = uniquify_tags(df);
+
+    EXPECT_TRUE((std::is_same<decltype(dft.values[100]), NoValue>::value));
+    EXPECT_EQ(dft.size(), 3);
+
+    EXPECT_EQ(dft.tags, (std::vector<int>{1, 2, 3}));
+}
+
+TEST(Group, sum)
+{
+    auto df = DataFrame<int, float>{{1, 2, 2, 3}, {10., 20., 100., 30.}};
+
+    auto g = Group::sum(df);
+
+    EXPECT_EQ(g.tags, (std::vector<int>{1, 2, 3}));
+    EXPECT_EQ(g.values, (std::vector<float>{10., 120., 30.}));
+}
+
+TEST(Index, Simple)
 {
     auto df = DataFrame<int, float>{.tags = {1, 2, 3, 4}, .values = {10., 20., 30., 40.}};
 
@@ -196,15 +178,13 @@ void test_index()
 
     auto g = df[i];
 
-    assert(g.size() == 2);
+    EXPECT_EQ(g.size(), 2);
 
-    assert(g.tags[0] == 2);
-    assert(g.values[0] == 20.f);
-    assert(g.tags[1] == 3);
-    assert(g.values[1] == 30.f);
+    EXPECT_EQ(g.tags, (std::vector<int>{2, 3}));
+    EXPECT_EQ(g.values, (std::vector<float>{20., 30.}));
 }
 
-void test_index_no_values()
+TEST(Index, NoValues)
 {
     auto df = DataFrame<int, float>{.tags = {1, 2, 3, 4}, .values = {10., 20., 30., 40.}};
 
@@ -212,26 +192,8 @@ void test_index_no_values()
 
     auto g = df[i];
 
-    assert(g.size() == 2);
+    EXPECT_EQ(g.size(), 2);
 
-    assert(g.tags[0] == 2);
-    assert(g.values[0] == 20.f);
-    assert(g.tags[1] == 3);
-    assert(g.values[1] == 30.f);
-}
-
-int main()
-{
-    test_range_tags();
-    test_columnar();
-    test_join_structs();
-    test_join_strings();
-    test_first_tags();
-    test_group_sum();
-    test_index_no_values();
-    test_join_simple_pair();
-    test_join_duplicates_left();
-    test_index();
-    test_join_simple();
-    test_join_binary();
+    EXPECT_EQ(g.tags, (std::vector<int>{2, 3}));
+    EXPECT_EQ(g.values, (std::vector<float>{20., 30.}));
 }

@@ -1,4 +1,3 @@
-#include <cassert>
 #include <initializer_list>
 #include <iostream>
 #include <type_traits>
@@ -123,8 +122,7 @@ operator<<(std::ostream &s, const DataFrame<Tag, NoValue> &df)
 }
 
 template <typename Merge12Op, typename AccumulateOp, typename Tag1, typename Value1, typename Tag2, typename Value2>
-static auto
-merge(const DataFrame<Tag1, Value1> &df1, const DataFrame<Tag2, Value2> &df2, Merge12Op merge_12, AccumulateOp accumulate)
+auto merge(const DataFrame<Tag1, Value1> &df1, const DataFrame<Tag2, Value2> &df2, Merge12Op merge_12, AccumulateOp accumulate)
 {
     using TagOut = decltype(merge_12(df1.tags[0], df2.tags[0], df1.values[0], df2.values[0]).first);
     using ValueOut = decltype(merge_12(df1.tags[0], df2.tags[0], df1.values[0], df2.values[0]).second);
@@ -312,10 +310,12 @@ struct Join
 };
 
 /* Deduplicate the tags of a dataframe. Produces a tag-only dataframe (on that
- * has NoValue as its value type). */
+ * has NoValue as its value type).
+ */
 template <typename Tag, typename Value>
 DataFrame<Tag, NoValue> uniquify_tags(const DataFrame<Tag, Value> &df)
 {
+    // TODO: can i re-write this using merge() or collate()?
     DataFrame<Tag, NoValue> df_out;
 
     if (!df.size())
@@ -323,10 +323,8 @@ DataFrame<Tag, NoValue> uniquify_tags(const DataFrame<Tag, Value> &df)
 
     df_out.tags.push_back(df.tags[0]);
     for (size_t i = 1; i < df.size(); ++i)
-    {
         if (df.tags[i] != df_out.tags.back())
             df_out.tags.push_back(df.tags[i]);
-    }
 
     return df_out;
 }
