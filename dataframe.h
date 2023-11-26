@@ -83,6 +83,11 @@ struct std::vector<RangeTag>
     size_t operator[](size_t i) const { return start + i * step; }
 };
 
+/* Dataframes specialized to range tags.
+
+These require special handling because the indexing operation returns a
+different type of dataframe.
+*/
 template <typename Value>
 struct DataFrame<RangeTag, Value>
 {

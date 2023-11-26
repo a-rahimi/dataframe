@@ -1,13 +1,14 @@
 # Introduction
 
-Dataframes are datastructures that facilitate statistical operations on
-datasets. They borrow ideas from data query languages like SQL , but they're
-data structures intended to be used inside a host programming language.  Since
-their introduction to the S programming language in 1990, dataframes have been
-enhanced and cleaned up in many ways. For example, the R programming language
-introduced [dplyr](http://dplyr.tidyverse.org), which expands the semantics of
-data frames, [Pandas](https://pandas.pydata.org) implements dataframes for
-Python, and [Polars](https://www.pola.rs) implements them in Rust.
+Dataframes are data structures that facilitate statistical operations on
+datasets. They borrow ideas from data query languages like SQL, but instead of
+providing a standalone language, they're intended to be used inside a host
+programming language. Since their introduction to the S programming language in
+1990, dataframes have been enhanced and cleaned up in many ways. For example,
+the R programming language introduced [dplyr](http://dplyr.tidyverse.org), which
+expands the semantics of data frames, [Pandas](https://pandas.pydata.org)
+implements dataframes for Python, and [Polars](https://www.pola.rs) implements
+them in Rust.
 
 Traditionally, dataframes are two-dimensional tables, like tables in relational
 database, or like numerical matrices.  Unlike a matrix, a dataframe may contain
@@ -18,48 +19,58 @@ record.  Typical operations on a dataframe produce new dataframes by selecting
 subsets of rows or columns of these tables (similar to SQL's "SELECT"), grouping
 rows or columns and computing summary statistics on these groups (similar to
 SQL's "GROUP BY"), or joining multiple dataframes by combining their rows
-whenever some of their match (similar to SQL's "JOIN").
+whenever some of their entries match (similar to SQL's "JOIN").
 
-This package implements a new, simplified dataframe in C++.
+This package implements a new, simplified dataframe in C++ in a way that takes
+advantage of C++'s static typing and data structure facilities.
 
 # How this package differs from other dataframe packages
 
- Dataframes in R and Python are helpful because they implement in native code
- operations that would otherwise be slow in interpreted code. For example,
- applying a user-supplied Python function to every row of a Pandas dataframe is
- slow, so Pandas implements a huge variety of operations in native code to avoid
- calling Python callbacks.  In C++, this is not an issue.  Applying a
- user-supplied C++ lambda to every row of a dataframe is not any slower than
- applying a built-in method. As such, a C++ dataframe library can be much
- simpler. Another consideration is that C++ already provides excellent
- facilities to manipulated structured data through structs, whereas in
- interpreted languages, structured data are represented through dynamic data
- structures that are slower to manipulated.  Here were the overarching desgin
- goals of this package:
+Dataframes in R and Python are helpful because they speed up with native code
+operations that would otherwise be slow in interpreted code. For example,
+applying a user-supplied Python function to every row of a Pandas dataframe is
+slow, so Pandas implements a huge variety of operations in native code to avoid
+calling Python callbacks.  In C++, this is not an issue.  Applying a
+user-supplied C++ lambda to every row of a dataframe is not any slower than
+applying a built-in method. That means a C++ dataframe library can focus on
+providing logical structure rather than implementing all basic operation
+imaginable.  Another consideration is that C++ structs already provide rich ways
+to manipulate structured data. For example, C++ already has facilities to
+combine two different types of struct into one new struct and handle the
+resulting conflicting field names through multiple inheritance.  But in
+interpreted languages, structured data have to be represented through dynamic
+data structures that are slower to manipulate. This is contrary to the approach
+[a well-established C++ dataframe
+package](https://github.com/hosseinmoein/DataFrame) takes, where dataframes are
+entirely dynamic objects with similar semantics as Pandas.  
+
+Here are the overarching desgin goals of this package:
 
 * Do as much work at compile-time as possible. The dataframes are statically
-  typed so there is no overhead to represent schemas, or interpret datatypes at
-  run-time. Eventually, I'd like the query planning to happen at compile time as
-  well, but I haven't built complex-enough queries to warrant a query yet, let
+  typed so there is no overhead to represent schemas, or to interpret datatypes at
+  run-time. Eventually, the query planning will happen at compile time as
+  well, but I haven't yet built complex-enough queries to warrant a query planner, let
   alone one that runs at compile time.
 
-* Portable to new compute backends. Most of the operations reduce to a call to a
-  function called "merge", which does most of the work. When porting the package to a
-  new compute substrate, like a distributed system or a GPU, most of
-  the code could be left intact. One would just port the merge function.
+* Easy to port to new compute backends. Most of
+  the operations reduce to a call to a function called "merge", which does most of
+  the work. When porting the package to a new compute substrate, like a
+  distributed system or a GPU, most of the code could be left intact. One would
+  just port the merge function.
 
-* Simple semantics. The semantics of this package are slightly more complicated
-  than Polars, which does not rely on a notion of a dataframe index, but
+* Simple semantics. The dataframe semantics in this package are slightly more
+  complicated than those of Polars, which does not rely on a notion of an index, but
   significantly simpler than those of dplyr or Pandas.
 
 Implementing a new dataframe library or porting one to a new compute engine (for
-example a distributed system, or a GPU) is a lot of work because  the algebra on
+example a distributed system, or a GPU) is a lot of work because the algebra on
 a traditional dataframe is surprisingly complicated.  For example [this
 analysis](https://escholarship.org/uc/item/9x5608wr) derives a dataframe API
 with 14 entry points. The API for R's dplyr dataframe package ostensibly has
-only four entry points (mutate, select, filter, summarize, arrange), but each
-entry point provides a plethora of options  that radically modify their
-behavior. Some of these entry points even provide a mini-language of their own.
+only five entry points ("mutate", "select", "filter", "summarize", and
+"arrange"), but each entry point provides a plethora of options  that radically
+modify their behavior. Some of these entry points even provide a mini-language
+of their own.
 
 The semantics for the dataframes implemented in this package are simple to
 define an implement. Almost all the operations rely on one workhorse function
@@ -243,24 +254,27 @@ struct O1
     int num_toes;
 };
 
-auto df1 = DataFrame<std::string, O1>{
-    {"ali", "john"},
-    {O1{.favorite_color = "green", .num_toes = 6}, O1{.favorite_color = "blue", .num_toes = 10}}
-};
-
 
 struct O2
 {
     int num_teeth;
 };
+```
 
+We'll then define a dataframe whose elements are of the first type, and another dataframe that contains elements of the second type:
+
+```
+auto df1 = DataFrame<std::string, O1>{
+    {"ali", "john"},
+    {O1{.favorite_color = "green", .num_toes = 6}, O1{.favorite_color = "blue", .num_toes = 10}}
+};
 auto df2 = DataFrame<std::string, O2>{
     {"ali", "john"},
     {O2{.num_teeth = 18}, O2{.num_teeth = 32}}
 };
 ```
 
-We can join these two dataframes on their tags to obtain a third dataframe whose elements are a third kind of struct: 
+To join these into one dataframe, we'll define a new type through C++'s builtin inheritence mechanism:
 
 ```
 struct O3 : O1, O2
