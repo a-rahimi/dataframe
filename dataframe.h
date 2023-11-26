@@ -18,15 +18,15 @@ struct IndexReduceOp
 {
     // Indexing fails if the tag or values don't have the right type.
     template <typename T, typename TO, typename V, typename VO>
-    auto operator()(T tag, TO tag_other, V v, VO)
+    auto operator()(T tag, TO, V v, VO)
     {
         return std::pair(NoTag(), v);
     }
 
-    // A successful indexing reduction takes the value of `this`, and ignores
-    // the value of the index.
+    // A successful indexing reduction in df1[df2] takes the value of df1, and
+    // ignores the value of df2.
     template <typename ValueOther>
-    auto operator()(Tag tag, Tag tag_other, Value v, ValueOther)
+    auto operator()(Tag tag, Tag, Value v, ValueOther)
     {
         return std::pair(tag, v);
     }
@@ -72,13 +72,30 @@ operator<<(std::ostream &s, const DataFrame<Tag, Value> &df)
 
 struct RangeTag;
 
+// A std::vector for sequential tags. Instead of storing the tag values,
+// computes them as needed.
 template <>
 struct std::vector<RangeTag>
 {
-    size_t start, end, step;
+    size_t start, end, step = 1;
 
     size_t size() const { return (end - start) / step; }
     size_t operator[](size_t i) const { return start + i * step; }
+};
+
+template <typename Value>
+struct DataFrame<RangeTag, Value>
+{
+    std::vector<RangeTag> tags;
+    std::vector<Value> values;
+
+    size_t size() const { return values.size(); }
+
+    template <typename ValueOther>
+    DataFrame<size_t, Value> operator[](const DataFrame<size_t, ValueOther> &index)
+    {
+        return merge(*this, index, IndexReduceOp<size_t, Value>(), IndexReduceOp<size_t, Value>());
+    }
 };
 
 // DataFrames of type NoValue use a special version of std::vector that takes up
@@ -100,12 +117,13 @@ operator<<(std::ostream &s, const DataFrame<Tag, NoValue> &df)
     return s;
 }
 
-template <typename Merge12Op, typename AccumulateOp, typename Tag, typename Value1, typename Value2>
+template <typename Merge12Op, typename AccumulateOp, typename Tag1, typename Value1, typename Tag2, typename Value2>
 static auto
-merge(const DataFrame<Tag, Value1> &df1, const DataFrame<Tag, Value2> &df2, Merge12Op merge_12, AccumulateOp accumulate)
+merge(const DataFrame<Tag1, Value1> &df1, const DataFrame<Tag2, Value2> &df2, Merge12Op merge_12, AccumulateOp accumulate)
 {
-    using ValueOut = decltype(merge_12(Tag(), Tag(), Value1(), Value2()).second);
-    DataFrame<Tag, ValueOut> df_out;
+    using TagOut = decltype(merge_12(df1.tags[0], df2.tags[0], df1.values[0], df2.values[0]).first);
+    using ValueOut = decltype(merge_12(df1.tags[0], df2.tags[0], df1.values[0], df2.values[0]).second);
+    DataFrame<TagOut, ValueOut> df_out;
 
     size_t i1 = 0, i2 = 0;
 
@@ -115,7 +133,7 @@ merge(const DataFrame<Tag, Value1> &df1, const DataFrame<Tag, Value2> &df2, Merg
         while ((df1.tags[i1] < df2.tags[i2]) && (i1 < df1.size()))
         {
             auto acc = merge_12(df1.tags[i1], NoTag(), df1.values[i1], NoValue());
-            Tag tag1 = df1.tags[i1];
+            auto tag1 = df1.tags[i1];
 
             i1++;
 
@@ -138,7 +156,7 @@ merge(const DataFrame<Tag, Value1> &df1, const DataFrame<Tag, Value2> &df2, Merg
                 acc = accumulate(df1.tags[i1], df2.tags[i2], df1.values[i1], acc.second);
 
             // Push the result for all repeated tags in df2.
-            for (Tag tag2 = df2.tags[i2]; (i2 < df2.size()) && (df2.tags[i2] == tag2); ++i2)
+            for (auto tag2 = df2.tags[i2]; (i2 < df2.size()) && (df2.tags[i2] == tag2); ++i2)
                 df_out.push_back(acc);
         }
         else
@@ -156,7 +174,7 @@ merge(const DataFrame<Tag, Value1> &df1, const DataFrame<Tag, Value2> &df2, Merg
         i1++;
 
         // Combine the run of identical tags from df1.
-        for (Tag tag1 = df1.tags[i1]; (tag1 == df1.tags[i1]) && (i1 < df1.size()); ++i1)
+        for (auto tag1 = df1.tags[i1]; (tag1 == df1.tags[i1]) && (i1 < df1.size()); ++i1)
             acc = accumulate(df1.tags[i1], NoTag(), df1.values[i1], acc.second);
 
         df_out.push_back(acc);
@@ -196,6 +214,7 @@ struct ReductionAdaptor
     }
 };
 
+// Specialize the reduction adaptor to when DataFrame2 is a NoValue dataframe.
 template <typename ReductionOp, typename Tag, typename Value1>
 struct ReductionAdaptor<ReductionOp, Tag, Value1, NoValue>
 {

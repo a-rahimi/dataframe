@@ -6,6 +6,16 @@ Compile this demo with
 #include "dataframe.h"
 #include <string>
 
+void test_range_tags()
+{
+    auto df = DataFrame<RangeTag, int>{.tags = {0, 5}, .values = {-1, -2, -3, -4, -5}};
+    auto i = DataFrame<size_t, NoValue>{{2, 3}};
+    auto c = df[i];
+
+    assert((c.tags == std::vector<size_t>{2, 3}));
+    assert((c.values == std::vector<int>{-3, -4}));
+}
+
 void test_columnar()
 {
     auto tags = std::vector<std::string>{"ali", "john"};
@@ -212,6 +222,7 @@ void test_index_no_values()
 
 int main()
 {
+    test_range_tags();
     test_columnar();
     test_join_structs();
     test_join_strings();
