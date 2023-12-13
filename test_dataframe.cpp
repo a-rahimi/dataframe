@@ -134,6 +134,7 @@ TEST(Join, DuplicatesLeft) {
     EXPECT_EQ(g.tags, (std::vector<int>{1, 2, 3}));
     EXPECT_EQ(g.values, (std::vector<float>{-1., 98., -3.}));
 }
+
 TEST(Join, Binary) {
     auto df1 = DataFrame<int, float>{
         .tags = {0,   0,   1  },
@@ -183,13 +184,13 @@ TEST(Utilities, first_tags) {
     EXPECT_EQ(dft.tags, (std::vector<int>{1, 2, 3}));
 }
 
-TEST(Group, sum) {
+TEST(Reduce, sum) {
     auto df = DataFrame<int, float>{
         {1,   2,   2,    3  },
         {10., 20., 100., 30.}
     };
 
-    auto g = Group::sum(df);
+    auto g = Reduce::sum(df);
 
     EXPECT_EQ(g.tags, (std::vector<int>{1, 2, 3}));
     EXPECT_EQ(g.values, (std::vector<float>{10., 120., 30.}));

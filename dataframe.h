@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <initializer_list>
 #include <iostream>
 #include <type_traits>
@@ -46,6 +47,8 @@ struct DataFrame {
         tags.push_back(p.first);
         values.push_back(p.second);
     }
+
+    size_t find_tag(Tag t) { return std::lower_bound(tags.begin(), tags.end(), t) - tags.begin(); }
 };
 
 template <typename Tag, typename Value>
@@ -83,6 +86,12 @@ struct DataFrame<RangeTag, Value> {
     DataFrame<size_t, Value> operator[](const DataFrame<size_t, ValueOther> &index) {
         return merge(*this, index, IndexReduceOp<size_t, Value>(), IndexReduceOp<size_t, Value>());
     }
+    size_t find_tag(size_t t) {
+        // TODO: return size() if the tag isn't in the index.
+
+        // t = start + i * step
+        return (t - start) / step;
+    }
 };
 
 // DataFrames of type NoValue use a special version of std::vector that takes up
@@ -99,65 +108,6 @@ std::ostream &operator<<(std::ostream &s, const DataFrame<Tag, NoValue> &df) {
         s << df.tags[i] << ", ";
     s << ']';
     return s;
-}
-
-template <typename Merge12Op, typename AccumulateOp, typename Tag1, typename Value1, typename Tag2, typename Value2>
-auto merge(const DataFrame<Tag1, Value1> &df1, const DataFrame<Tag2, Value2> &df2, Merge12Op merge_12,
-           AccumulateOp accumulate) {
-    using TagOut = decltype(merge_12(df1.tags[0], df2.tags[0], df1.values[0], df2.values[0]).first);
-    using ValueOut = decltype(merge_12(df1.tags[0], df2.tags[0], df1.values[0], df2.values[0]).second);
-    DataFrame<TagOut, ValueOut> df_out;
-
-    size_t i1 = 0, i2 = 0;
-
-    while (i2 < df2.size()) {
-        // Process tags in df1 that are smaller than the current tag in df2.
-        while ((df1.tags[i1] < df2.tags[i2]) && (i1 < df1.size())) {
-            auto acc = merge_12(df1.tags[i1], NoTag(), df1.values[i1], NoValue());
-            auto tag1 = df1.tags[i1];
-
-            i1++;
-
-            // Combine the run of identical tags from df1.
-            for (; df1.tags[i1] == tag1; ++i1)
-                acc = accumulate(df1.tags[i1], NoTag(), df1.values[i1], acc.second);
-
-            df_out.push_back(acc);
-        }
-
-        // Process tags in df1 that match the current tag in df2.
-        if (df1.tags[i1] == df2.tags[i2]) {
-            auto acc = merge_12(df1.tags[i1], df2.tags[i2], df1.values[i1], df2.values[i2]);
-
-            i1++;
-
-            // Combine the run of identical tags from df1.
-            for (; (df1.tags[i1] == df2.tags[i2]) && (i1 < df1.size()); ++i1)
-                acc = accumulate(df1.tags[i1], df2.tags[i2], df1.values[i1], acc.second);
-
-            // Push the result for all repeated tags in df2.
-            for (auto tag2 = df2.tags[i2]; (i2 < df2.size()) && (df2.tags[i2] == tag2); ++i2)
-                df_out.push_back(acc);
-        } else {
-            // df1 had no tags that matched df2.
-            ++i2;
-        }
-    }
-
-    // Process remaining tags in df1.
-    while (i1 < df1.size()) {
-        auto acc = merge_12(df1.tags[i1], NoTag(), df1.values[i1], NoValue());
-
-        i1++;
-
-        // Combine the run of identical tags from df1.
-        for (auto tag1 = df1.tags[i1]; (tag1 == df1.tags[i1]) && (i1 < df1.size()); ++i1)
-            acc = accumulate(df1.tags[i1], NoTag(), df1.values[i1], acc.second);
-
-        df_out.push_back(acc);
-    }
-
-    return df_out;
 }
 
 template <typename ReductionOp, typename Tag, typename Value1, typename Value2>
@@ -278,7 +228,7 @@ DataFrame<Tag, NoValue> uniquify_tags(const DataFrame<Tag, Value> &df) {
     return df_out;
 }
 
-struct Group {
+struct Reduce {
     template <typename Tag, typename Value>
     static auto sum(const DataFrame<Tag, Value> &df) {
         return Join::sum(df, uniquify_tags(df));
