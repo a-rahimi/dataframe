@@ -123,31 +123,6 @@ struct Expr_Reduction {
     void advance_to_tag(Tag t) { advance_to_tag_by_linear_search(*this, t); }
 };
 
-struct Reduce {
-    template <typename Value, typename ReduceOp>
-    struct ReduceAdaptor {
-        Value init;
-        ReduceOp op;
-
-        ReduceAdaptor(Value _init, ReduceOp _op) : init(_init), op(_op) {}
-
-        template <typename Tag>
-        auto operator()(Tag t, Value v) {
-            return (*this)(t, t, v, init);
-        }
-
-        template <typename Tag, typename ValueAccumulator>
-        auto operator()(Tag t1, Tag, Value v1, ValueAccumulator v2) {
-            return std::pair(t1, op(v1, v2));
-        }
-    };
-
-    template <typename Expr>
-    static auto sum(Expr df) {
-        return Expr_Reduction(to_expr(df), ReduceAdaptor(typename Expr::Value(0), std::plus<>()));
-    }
-};
-
 // Zip two dataframes.
 template <typename Expr1, typename Expr2, typename MergeOp>
 struct Expr_Intersection {
@@ -186,31 +161,6 @@ struct Expr_Intersection {
 
     void advance_to_tag(Tag t) { advance_to_tag_by_linear_search(*this, t); }
 };
-
-struct Join {
-    template <typename CollateOp>
-    struct CollateAdaptor {
-        CollateOp op;
-
-        CollateAdaptor(CollateOp _op) : op(_op) {}
-
-        template <typename Tag1, typename Tag2, typename Value1, typename Value2>
-        auto operator()(Tag1 t1, Tag2, Value1 v1, Value2 v2) {
-            return std::pair(t1, op(v1, v2));
-        }
-    };
-
-    template <typename Expr1, typename Expr2, typename CollateOp>
-    static auto collate(Expr1 df1, Expr2 df2, CollateOp op) {
-        return Expr_Intersection(to_expr(df1), to_expr(df2), CollateAdaptor(op));
-    }
-
-    template <typename Expr1, typename Expr2>
-    static auto sum(Expr1 df1, Expr2 df2) {
-        return Expr_Intersection(to_expr(df1), to_expr(df2), CollateAdaptor(std::plus<>()));
-    }
-};
-
 struct NoTag {};
 
 struct NoValue {};
@@ -301,3 +251,52 @@ std::ostream &operator<<(std::ostream &s, const DataFrame<Tag, NoValue> &df) {
     s << ']';
     return s;
 }
+
+namespace Reduce {
+template <typename Value, typename ReduceOp>
+struct ReduceAdaptor {
+    Value init;
+    ReduceOp op;
+
+    ReduceAdaptor(Value _init, ReduceOp _op) : init(_init), op(_op) {}
+
+    template <typename Tag>
+    auto operator()(Tag t, Value v) {
+        return (*this)(t, t, v, init);
+    }
+
+    template <typename Tag, typename ValueAccumulator>
+    auto operator()(Tag t1, Tag, Value v1, ValueAccumulator v2) {
+        return std::pair(t1, op(v1, v2));
+    }
+};
+
+template <typename Expr>
+static auto sum(Expr df) {
+    return Expr_Reduction(to_expr(df), ReduceAdaptor(typename Expr::Value(0), std::plus<>()));
+}
+};  // namespace Reduce
+
+namespace Join {
+template <typename CollateOp>
+struct CollateAdaptor {
+    CollateOp op;
+
+    CollateAdaptor(CollateOp _op) : op(_op) {}
+
+    template <typename Tag1, typename Tag2, typename Value1, typename Value2>
+    auto operator()(Tag1 t1, Tag2, Value1 v1, Value2 v2) {
+        return std::pair(t1, op(v1, v2));
+    }
+};
+
+template <typename Expr1, typename Expr2, typename CollateOp>
+static auto collate(Expr1 df1, Expr2 df2, CollateOp op) {
+    return Expr_Intersection(to_expr(df1), to_expr(df2), CollateAdaptor(op));
+}
+
+template <typename Expr1, typename Expr2>
+static auto sum(Expr1 df1, Expr2 df2) {
+    return Expr_Intersection(to_expr(df1), to_expr(df2), CollateAdaptor(std::plus<>()));
+}
+};  // namespace Join
