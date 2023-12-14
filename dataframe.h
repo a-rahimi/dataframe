@@ -31,6 +31,21 @@ struct DataFrame {
         return Expr_Intersection(
             to_expr(*this), to_expr(index), [](Tag tag, Tag, Value v, ValueOther) { return std::pair(tag, v); });
     }
+
+    auto operator[](size_t i) {
+        struct TagValue {
+            const Tag &t;
+            Value &v;
+        };
+        return TagValue{(*tags)[i], (*values)[i]};
+    }
+    auto operator[](size_t i) const {
+        struct TagValueConst {
+            const Tag &t;
+            const Value &v;
+        };
+        return TagValueConst{(*tags)[i], (*values)[i]};
+    }
 };
 
 template <typename Expr>
@@ -78,6 +93,21 @@ struct DataFrame<RangeTag, _Value> {
     auto operator[](const DataFrame<size_t, ValueOther> &index) {
         return Expr_Intersection(
             to_expr(*this), to_expr(index), [](size_t tag, size_t, Value v, ValueOther) { return std::pair(tag, v); });
+    }
+
+    auto operator[](size_t i) {
+        struct TagValue {
+            Tag t;
+            Value &v;
+        };
+        return TagValue{i, (*values)[i]};
+    }
+    auto operator[](size_t i) const {
+        struct TagValueConst {
+            const Tag t;
+            const Value &v;
+        };
+        return TagValueConst{i, (*values)[i]};
     }
 };
 

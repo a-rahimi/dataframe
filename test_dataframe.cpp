@@ -29,6 +29,26 @@ TEST(DataFrame, passed_by_reference) {
     EXPECT_EQ((*df.values)[2], 35.);
 }
 
+TEST(DataFrame, scalar_index_TagValue) {
+    auto df = DataFrame<int, float>({1, 2, 3, 4}, {10., 20., 30., 40.});
+
+    EXPECT_EQ(df[3].t, 4);
+    EXPECT_EQ(df[3].v, 40.);
+}
+TEST(DataFrame, scalar_index_TagValue_modifiable) {
+    auto df = DataFrame<int, float>({1, 2, 3, 4}, {10., 20., 30., 40.});
+
+    df[1].v = 21.;
+
+    EXPECT_EQ(df[1].v, 21.);
+}
+
+TEST(DataFrame, scalar_index_TagValue_const) {
+    const DataFrame<int, float> df({1, 2, 3, 4}, {10., 20., 30., 40.});
+
+    EXPECT_EQ(df[1].v, 20.);
+}
+
 TEST(Expr_DataFrame, find_tag) {
     auto df = DataFrame<int, float>({1, 2, 3, 4}, {10., 20., 30., 40.});
     auto edf = to_expr(df);
@@ -38,8 +58,8 @@ TEST(Expr_DataFrame, find_tag) {
     EXPECT_FALSE(edf.end());
     EXPECT_EQ(edf.tag, 2);
     EXPECT_EQ(edf.value, 20);
-    EXPECT_EQ((*df.tags)[edf.i], 2);
-    EXPECT_EQ((*df.values)[edf.i], 20);
+    EXPECT_EQ(df[edf.i].t, 2);
+    EXPECT_EQ(df[edf.i].v, 20);
 }
 
 TEST(Expr_DataFrame, find_tag_missing) {
@@ -130,9 +150,9 @@ TEST(Join, SimplePair) {
 
     EXPECT_EQ(g.size(), 3);
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
-    EXPECT_EQ((*g.values)[0], std::pair(10.f, -11.f));
-    EXPECT_EQ((*g.values)[1], std::pair(20.f, -22.f));
-    EXPECT_EQ((*g.values)[2], std::pair(30.f, -33.f));
+    EXPECT_EQ(g[0].v, std::pair(10.f, -11.f));
+    EXPECT_EQ(g[1].v, std::pair(20.f, -22.f));
+    EXPECT_EQ(g[2].v, std::pair(30.f, -33.f));
 }
 
 TEST(Join, Reduced) {
@@ -179,17 +199,17 @@ struct O2 {
 struct O3 : O1, O2 {
     O3() {}
     O3(const O1 &o1, const O2 &o2) : O1(o1), O2(o2) {}
+
+    friend bool operator==(const O3 &left, const O3 &right) {
+        return (left.favorite_color == right.favorite_color) && (left.num_toes == right.num_toes) &&
+               (left.num_teeth == right.num_teeth);
+    }
+
+    friend std::ostream &operator<<(std::ostream &s, const O3 &o3) {
+        s << "O3(" << o3.favorite_color << ", " << o3.num_toes << ", " << o3.num_teeth << ')';
+        return s;
+    }
 };
-
-bool operator==(const O3 &left, const O3 &right) {
-    return (left.favorite_color == right.favorite_color) && (left.num_toes == right.num_toes) &&
-           (left.num_teeth == right.num_teeth);
-}
-
-std::ostream &operator<<(std::ostream &s, const O3 &o3) {
-    s << "O3(" << o3.favorite_color << ", " << o3.num_toes << ", " << o3.num_teeth << ')';
-    return s;
-}
 
 TEST(Join, Structs) {
     auto df1 = DataFrame<std::string, O1>{
@@ -205,8 +225,8 @@ TEST(Join, Structs) {
     auto g = materialize(Join::collate(df1, df2, [](const O1 &left, const O2 &right) { return O3(left, right); }));
 
     EXPECT_EQ(*g.tags, *df1.tags);
-    EXPECT_EQ((*g.values)[0], O3(O1{"green", 6}, O2{18}));
-    EXPECT_EQ((*g.values)[1], O3(O1{"blue", 10}, O2{32}));
+    EXPECT_EQ(g[0].v, O3(O1{"green", 6}, O2{18}));
+    EXPECT_EQ(g[1].v, O3(O1{"blue", 10}, O2{32}));
 }
 
 TEST(Columnar, Simple) {
@@ -225,8 +245,8 @@ TEST(Columnar, Simple) {
     auto toes_per_tooth = materialize(Join::collate(
         df.num_toes, df.num_teeth, [](int num_toes, int num_teeth) { return float(num_toes) / num_teeth; }));
     EXPECT_EQ(toes_per_tooth.size(), 2);
-    EXPECT_EQ((*toes_per_tooth.values)[0], 6.f / 18);
-    EXPECT_EQ((*toes_per_tooth.values)[1], 10.f / 32);
+    EXPECT_EQ(toes_per_tooth[0].v, 6.f / 18);
+    EXPECT_EQ(toes_per_tooth[1].v, 10.f / 32);
 }
 
 TEST(RangeTags, implicit_tags) {
@@ -243,8 +263,8 @@ TEST(RangeTags, advance_to_tag) {
 
     edf.advance_to_tag(3);
 
-    EXPECT_EQ((*df.tags)[edf.i], 3);
-    EXPECT_EQ((*df.values)[edf.i], -4);
+    EXPECT_EQ(df[edf.i].t, 3);
+    EXPECT_EQ(df[edf.i].v, -4);
 }
 
 TEST(RangeTags, advance_to_tag_Missing) {
