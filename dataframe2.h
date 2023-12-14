@@ -119,7 +119,7 @@ struct Expr_Reduction {
     void advance_to_tag(Tag t) { advance_to_tag_by_linear_search(*this, t); }
 };
 
-// Zip two dataframes.
+// Inner join two dataframes.
 template <typename Expr1, typename Expr2, typename MergeOp>
 struct Expr_Intersection {
     Expr1 df1;
@@ -150,6 +150,43 @@ struct Expr_Intersection {
             value = tagvalue.second;
             df2.next();
             break;
+        }
+    }
+
+    bool end() const { return _end; }
+
+    void advance_to_tag(Tag t) { advance_to_tag_by_linear_search(*this, t); }
+};
+
+// Outer join two dataframes.
+template <typename Expr1, typename Expr2>
+struct Expr_Union {
+    Expr1 df1;
+    Expr2 df2;
+
+    using Tag = Expr1::Tag;
+    using Value = Expr1::Value;
+
+    Tag tag;
+    Value value;
+    bool _end;
+
+    Expr_Union(Expr1 _df1, Expr2 _df2) : df1(_df1), df2(_df2), _end(false) { next(); }
+
+    void next() {
+        _end = df1.end() && df2.end();
+
+        if (!df1.end() && ((df1.tag < df2.tag) || df2.end())) {
+            tag = df1.tag;
+            value = df1.value;
+            df1.next();
+            return;
+        }
+
+        if (!df2.end() && ((df2.tag <= df1.tag) || df1.end())) {
+            tag = df2.tag;
+            value = df2.value;
+            df2.next();
         }
     }
 
@@ -316,3 +353,8 @@ static auto sum(Expr1 df1, Expr2 df2) {
     return Expr_Intersection(to_expr(df1), to_expr(df2), CollateAdaptor(std::plus<>()));
 }
 };  // namespace Join
+
+template <typename Expr1, typename Expr2>
+auto concatenate(Expr1 df1, Expr2 df2) {
+    return Expr_Union(to_expr(df1), to_expr(df2));
+}
