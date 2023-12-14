@@ -98,6 +98,18 @@ TEST(Reduce, sum) {
     EXPECT_EQ(g.values, (std::vector<float>{10., 120., 30.}));
 }
 
+TEST(Reduce, max) {
+    auto df = DataFrame<int, float>{
+        {1,   2,   2,    3  },
+        {10., 20., 100., 30.}
+    };
+
+    auto g = materialize(Reduce::reduce(df, [](float a, float b) { return a > b ? a : b; }));
+
+    EXPECT_EQ(g.tags, (std::vector<int>{1, 2, 3}));
+    EXPECT_EQ(g.values, (std::vector<float>{10., 100., 30.}));
+}
+
 TEST(Join, SimplePair) {
     auto df1 = DataFrame<int, float>{
         {1,   2,   3  },

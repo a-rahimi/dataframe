@@ -249,28 +249,34 @@ std::ostream &operator<<(std::ostream &s, const DataFrame<Tag, NoValue> &df) {
 }
 
 namespace Reduce {
-template <typename Value, typename ReduceOp>
+template <typename ReduceOp>
 struct ReduceAdaptor {
-    Value init;
     ReduceOp op;
 
-    ReduceAdaptor(Value _init, ReduceOp _op) : init(_init), op(_op) {}
+    ReduceAdaptor(ReduceOp _op) : op(_op) {}
 
-    template <typename Tag>
+    template <typename Tag, typename Value>
     auto operator()(Tag t, Value v) {
-        return (*this)(t, t, v, init);
+        using ValueOutput = decltype(op(v, v));
+        return std::pair(t, ValueOutput(v));
     }
 
-    template <typename Tag, typename ValueAccumulator>
+    template <typename Tag, typename Value, typename ValueAccumulator>
     auto operator()(Tag t1, Tag, Value v1, ValueAccumulator v2) {
         return std::pair(t1, op(v1, v2));
     }
 };
 
+template <typename Expr, typename ReduceOp>
+static auto reduce(Expr df, ReduceOp op) {
+    return Expr_Reduction(to_expr(df), ReduceAdaptor(op));
+}
+
 template <typename Expr>
 static auto sum(Expr df) {
-    return Expr_Reduction(to_expr(df), ReduceAdaptor(typename Expr::Value(0), std::plus<>()));
+    return reduce(df, std::plus<>());
 }
+
 };  // namespace Reduce
 
 namespace Join {
