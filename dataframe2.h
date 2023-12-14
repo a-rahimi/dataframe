@@ -20,9 +20,9 @@ struct Expr_DataFrame {
     Tag tag;
     Value value;
 
-    Expr_DataFrame(DataFrame<Tag, Value> _df) : df(_df), i(0) { compute_tagvalue(); }
+    Expr_DataFrame(DataFrame<Tag, Value> _df) : df(_df), i(0) { update_tagvalue(); }
 
-    void compute_tagvalue() {
+    void update_tagvalue() {
         tag = df.tags[i];
         value = df.values[i];
     }
@@ -31,12 +31,12 @@ struct Expr_DataFrame {
 
     void next() {
         ++i;
-        compute_tagvalue();
+        update_tagvalue();
     }
 
     void advance_to_tag(Tag t) {
         i = std::lower_bound(df.tags.begin(), df.tags.end(), t) - df.tags.begin();
-        compute_tagvalue();
+        update_tagvalue();
     }
 };
 
@@ -53,24 +53,19 @@ struct Expr_DataFrame<RangeTag, _Value> {
     Tag tag;
     Value value;
 
-    Expr_DataFrame(DataFrame<RangeTag, Value> _df) : df(_df), i(0) { compute_tagvalue(); }
+    Expr_DataFrame(DataFrame<RangeTag, Value> _df) : df(_df) { update_tagvalue(0); }
 
-    void compute_tagvalue() {
-        tag = i;
-        value = df.values[i];
+    void update_tagvalue(size_t _i) {
+        i = _i;
+        tag = _i;
+        value = df.values[_i];
     }
 
     bool end() const { return i >= df.size(); }
 
-    void next() {
-        ++i;
-        compute_tagvalue();
-    }
+    void next() { update_tagvalue(i + 1); }
 
-    void advance_to_tag(Tag t) {
-        i = t;
-        compute_tagvalue();
-    }
+    void advance_to_tag(Tag t) { update_tagvalue(t); }
 };
 
 // Convert a dataframe to a Expr_DataFrame. If the argument is already a Expr_DataFrame, just return it as is.
@@ -161,6 +156,7 @@ struct Expr_Intersection {
 
     void advance_to_tag(Tag t) { advance_to_tag_by_linear_search(*this, t); }
 };
+
 struct NoTag {};
 
 struct NoValue {};
