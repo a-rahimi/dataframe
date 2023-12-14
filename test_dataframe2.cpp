@@ -33,10 +33,7 @@ TEST(Expr_DataFrame, find_tag) {
 }
 
 TEST(Expr_DataFrame, find_tag_missing) {
-    auto df = DataFrame<int, float>{
-        {1,   2,   3,   4  },
-        {10., 20., 30., 40.}
-    };
+    auto df = DataFrame<int, float>({1, 2, 3, 4}, {10., 20., 30., 40.});
     auto edf = to_expr(df);
 
     edf.advance_to_tag(20);
@@ -45,10 +42,7 @@ TEST(Expr_DataFrame, find_tag_missing) {
 }
 
 TEST(Expr_DataFrame, materialize) {
-    DataFrame<int, float> original_df{
-        {1,   2,   3,   4  },
-        {10., 20., 30., 40.}
-    };
+    DataFrame<int, float> original_df({1, 2, 3, 4}, {10., 20., 30., 40.});
     auto edf = Expr_DataFrame(original_df);
 
     auto df = materialize(edf);
@@ -76,10 +70,7 @@ TEST(Index, Simple) {
 }
 
 TEST(Index, NoValues) {
-    auto df = DataFrame<int, float>{
-        {1,   2,   3,   4  },
-        {10., 20., 30., 40.}
-    };
+    auto df = DataFrame<int, float>({1, 2, 3, 4}, {10., 20., 30., 40.});
 
     auto i = DataFrame<int, NoValue>({2, 3}, {});
 
@@ -92,10 +83,7 @@ TEST(Index, NoValues) {
 }
 
 TEST(Reduce, sum) {
-    auto df = DataFrame<int, float>{
-        {1,   2,   2,    3  },
-        {10., 20., 100., 30.}
-    };
+    auto df = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
 
     auto g = materialize(Reduce::sum(df));
 
@@ -116,10 +104,7 @@ TEST(Reduce, max) {
 }
 
 TEST(Reduce, max_manual) {
-    auto df = DataFrame<int, float>{
-        {1,   2,   2,    3  },
-        {10., 20., 100., 30.}
-    };
+    auto df = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
 
     auto g = materialize(Reduce::reduce(df, [](float a, float b) { return a > b ? a : b; }));
 
@@ -128,14 +113,8 @@ TEST(Reduce, max_manual) {
 }
 
 TEST(Join, SimplePair) {
-    auto df1 = DataFrame<int, float>{
-        {1,   2,   3  },
-        {10., 20., 30.}
-    };
-    auto df2 = DataFrame<int, float>{
-        {1,    2,    3   },
-        {-11., -22., -33.}
-    };
+    auto df1 = DataFrame<int, float>({1, 2, 3}, {10., 20., 30.});
+    auto df2 = DataFrame<int, float>({1, 2, 3}, {-11., -22., -33.});
 
     auto g = materialize(Join::collate(df1, df2, [](float v1, float v2) { return std::pair(v1, v2); }));
 
@@ -147,14 +126,8 @@ TEST(Join, SimplePair) {
 }
 
 TEST(Join, Reduced) {
-    auto df1 = DataFrame<int, float>{
-        {0,   0,   1  },
-        {10., 20., 30.}
-    };
-    auto df2 = DataFrame<int, float>{
-        {0,    1,    1   },
-        {-11., -22., -33.}
-    };
+    auto df1 = DataFrame<int, float>({0, 0, 1}, {10., 20., 30.});
+    auto df2 = DataFrame<int, float>({0, 1, 1}, {-11., -22., -33.});
 
     auto g = materialize(Join::sum(Reduce::sum(df1), Reduce::sum(df2)));
 
@@ -164,14 +137,8 @@ TEST(Join, Reduced) {
 }
 
 TEST(Join, ReducedLeftDuplicates) {
-    auto df1 = DataFrame<int, float>{
-        {1,   2,   2,    3  },
-        {10., 20., 100., 30.}
-    };
-    auto df2 = DataFrame<int, float>{
-        {1,    2,    3   },
-        {-11., -22., -33.}
-    };
+    auto df1 = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
+    auto df2 = DataFrame<int, float>({1, 2, 3}, {-11., -22., -33.});
 
     auto g = materialize(Join::sum(Reduce::sum(df1), Reduce::sum(df2)));
 
@@ -182,14 +149,8 @@ TEST(Join, ReducedLeftDuplicates) {
 }
 
 TEST(Join, Strings) {
-    auto df1 = DataFrame<std::string, float>{
-        {"ali", "john"},
-        {1.,    2.    }
-    };
-    auto df2 = DataFrame<std::string, float>{
-        {"ali", "john"},
-        {10.,   20.   }
-    };
+    auto df1 = DataFrame<std::string, float>({"ali", "john"}, {1., 2.});
+    auto df2 = DataFrame<std::string, float>({"ali", "john"}, {10., 20.});
 
     auto g = materialize(Join::sum(df1, df2));
 
@@ -272,10 +233,7 @@ TEST(RangeTags, advance_to_tag) {
 }
 
 TEST(RangeTags, advance_to_tag_Missing) {
-    auto df = DataFrame<RangeTag, int>{
-        {5},
-        {-1, -2, -3, -4, -5}
-    };
+    auto df = DataFrame<RangeTag, int>({5}, {-1, -2, -3, -4, -5});
     auto edf = to_expr(df);
 
     edf.advance_to_tag(20);
@@ -284,10 +242,7 @@ TEST(RangeTags, advance_to_tag_Missing) {
 }
 
 TEST(RangeTags, Indexing) {
-    auto df = DataFrame<RangeTag, int>{
-        {5},
-        {-1, -2, -3, -4, -5}
-    };
+    auto df = DataFrame<RangeTag, int>({5}, {-1, -2, -3, -4, -5});
     auto i = DataFrame<size_t, NoValue>({2, 3}, {});
     auto c = materialize(df[i]);
 
