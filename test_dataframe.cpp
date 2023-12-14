@@ -229,11 +229,16 @@ TEST(Columnar, Simple) {
     EXPECT_EQ((*toes_per_tooth.values)[1], 10.f / 32);
 }
 
+TEST(RangeTags, implicit_tags) {
+    auto df_implicit = DataFrame<RangeTag, int>({-1, -2, -3, -4, -5});
+    auto df_explicit = DataFrame<RangeTag, int>({5}, {-1, -2, -3, -4, -5});
+
+    EXPECT_NE(df_implicit.tags, df_explicit.tags);
+    EXPECT_EQ(df_implicit.tags->size(), df_explicit.tags->size());
+}
+
 TEST(RangeTags, advance_to_tag) {
-    auto df = DataFrame<RangeTag, int>{
-        {5},
-        {-1, -2, -3, -4, -5}
-    };
+    auto df = DataFrame<RangeTag, int>({-1, -2, -3, -4, -5});
     auto edf = to_expr(df);
 
     edf.advance_to_tag(3);
@@ -243,7 +248,7 @@ TEST(RangeTags, advance_to_tag) {
 }
 
 TEST(RangeTags, advance_to_tag_Missing) {
-    auto df = DataFrame<RangeTag, int>({5}, {-1, -2, -3, -4, -5});
+    auto df = DataFrame<RangeTag, int>({-1, -2, -3, -4, -5});
     auto edf = to_expr(df);
 
     edf.advance_to_tag(20);
@@ -252,7 +257,7 @@ TEST(RangeTags, advance_to_tag_Missing) {
 }
 
 TEST(RangeTags, Indexing) {
-    auto df = DataFrame<RangeTag, int>({5}, {-1, -2, -3, -4, -5});
+    auto df = DataFrame<RangeTag, int>({-1, -2, -3, -4, -5});
     auto i = DataFrame<size_t, NoValue>({2, 3}, {});
     auto c = materialize(df[i]);
 

@@ -66,6 +66,9 @@ struct DataFrame<RangeTag, _Value> {
     std::shared_ptr<std::vector<RangeTag>> tags;
     std::shared_ptr<std::vector<Value>> values;
 
+    DataFrame(const std::vector<Value> &_values)
+        : tags(new std::vector<RangeTag>{_values.size()}), values(new auto(_values)) {}
+
     DataFrame(const std::vector<RangeTag> &_tags, const std::vector<Value> &_values)
         : tags(new auto(_tags)), values(new auto(_values)) {}
 
