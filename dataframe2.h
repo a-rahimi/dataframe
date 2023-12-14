@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <initializer_list>
 #include <iostream>
+#include <memory>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -23,8 +24,8 @@ struct Expr_DataFrame {
     Expr_DataFrame(DataFrame<Tag, Value> _df) : df(_df), i(0) { update_tagvalue(); }
 
     void update_tagvalue() {
-        tag = df.tags[i];
-        value = df.values[i];
+        tag = (*df.tags)[i];
+        value = (*df.values)[i];
     }
 
     bool end() const { return i >= df.size(); }
@@ -35,7 +36,7 @@ struct Expr_DataFrame {
     }
 
     void advance_to_tag(Tag t) {
-        i = std::lower_bound(df.tags.begin(), df.tags.end(), t) - df.tags.begin();
+        i = std::lower_bound(df.tags->begin(), df.tags->end(), t) - df.tags->begin();
         update_tagvalue();
     }
 };
@@ -58,7 +59,7 @@ struct Expr_DataFrame<RangeTag, _Value> {
     void update_tagvalue(size_t _i) {
         i = _i;
         tag = _i;
-        value = df.values[_i];
+        value = (*df.values)[_i];
     }
 
     bool end() const { return i >= df.size(); }
@@ -173,10 +174,15 @@ template <typename _Tag, typename _Value>
 struct DataFrame {
     using Tag = _Tag;
     using Value = _Value;
-    std::vector<Tag> tags;
-    std::vector<Value> values;
 
-    size_t size() const { return tags.size(); }
+    std::shared_ptr<std::vector<Tag>> tags;
+    std::shared_ptr<std::vector<Value>> values;
+
+    DataFrame() : tags(new std::vector<Tag>), values(new std::vector<Value>) {}
+    DataFrame(const std::vector<Tag> &_tags, const std::vector<Value> &_values)
+        : tags(new auto(_tags)), values(new auto(_values)) {}
+
+    size_t size() const { return tags->size(); }
 
     template <typename ValueOther>
     auto operator[](const DataFrame<Tag, ValueOther> &index) {
@@ -188,8 +194,8 @@ template <typename Expr>
 auto materialize(Expr edf) {
     DataFrame<decltype(edf.tag), decltype(edf.value)> mdf;
     for (; !edf.end(); edf.next()) {
-        mdf.tags.push_back(edf.tag);
-        mdf.values.push_back(edf.value);
+        mdf.tags->push_back(edf.tag);
+        mdf.values->push_back(edf.value);
     }
     return mdf;
 }
@@ -221,10 +227,13 @@ struct DataFrame<RangeTag, _Value> {
     using Tag = size_t;
     using Value = _Value;
 
-    std::vector<RangeTag> tags;
-    std::vector<Value> values;
+    std::shared_ptr<std::vector<RangeTag>> tags;
+    std::shared_ptr<std::vector<Value>> values;
 
-    size_t size() const { return values.size(); }
+    DataFrame(const std::vector<RangeTag> &_tags, const std::vector<Value> &_values)
+        : tags(new auto(_tags)), values(new auto(_values)) {}
+
+    size_t size() const { return values->size(); }
 
     template <typename ValueOther>
     auto operator[](const DataFrame<size_t, ValueOther> &index) {
@@ -275,6 +284,11 @@ static auto reduce(Expr df, ReduceOp op) {
 template <typename Expr>
 static auto sum(Expr df) {
     return reduce(df, std::plus<>());
+}
+
+template <typename Expr>
+static auto max(Expr df) {
+    return reduce(df, [](typename Expr::Value v1, typename Expr::Value v2) { return v1 > v2 ? v1 : v2; });
 }
 
 };  // namespace Reduce

@@ -9,11 +9,18 @@ Compile this demo with
 
 #include "dataframe2.h"
 
+TEST(Expr_DataFrame, copy) {
+    auto df = DataFrame<int, float>({1, 2, 3, 4}, {10., 20., 30., 40.});
+    auto df_copy = df;
+
+    EXPECT_EQ(df.tags, df_copy.tags);
+    EXPECT_EQ(df.values, df_copy.values);
+    EXPECT_EQ(*df.tags, *df_copy.tags);
+    EXPECT_EQ(*df.values, *df_copy.values);
+}
+
 TEST(Expr_DataFrame, find_tag) {
-    auto df = DataFrame<int, float>{
-        .tags = {1,   2,   3,   4  },
-          .values = {10., 20., 30., 40.}
-    };
+    auto df = DataFrame<int, float>({1, 2, 3, 4}, {10., 20., 30., 40.});
     auto edf = to_expr(df);
 
     edf.advance_to_tag(2);
@@ -21,14 +28,14 @@ TEST(Expr_DataFrame, find_tag) {
     EXPECT_FALSE(edf.end());
     EXPECT_EQ(edf.tag, 2);
     EXPECT_EQ(edf.value, 20);
-    EXPECT_EQ(df.tags[edf.i], 2);
-    EXPECT_EQ(df.values[edf.i], 20);
+    EXPECT_EQ((*df.tags)[edf.i], 2);
+    EXPECT_EQ((*df.values)[edf.i], 20);
 }
 
 TEST(Expr_DataFrame, find_tag_missing) {
     auto df = DataFrame<int, float>{
-        .tags = {1,   2,   3,   4  },
-          .values = {10., 20., 30., 40.}
+        {1,   2,   3,   4  },
+        {10., 20., 30., 40.}
     };
     auto edf = to_expr(df);
 
@@ -39,51 +46,49 @@ TEST(Expr_DataFrame, find_tag_missing) {
 
 TEST(Expr_DataFrame, materialize) {
     DataFrame<int, float> original_df{
-        .tags = {1,   2,   3,   4  },
-          .values = {10., 20., 30., 40.}
+        {1,   2,   3,   4  },
+        {10., 20., 30., 40.}
     };
     auto edf = Expr_DataFrame(original_df);
 
     auto df = materialize(edf);
 
-    EXPECT_EQ(df.tags, original_df.tags);
-    EXPECT_EQ(df.values, original_df.values);
+    EXPECT_EQ(*df.tags, *original_df.tags);
+    EXPECT_EQ(*df.values, *original_df.values);
 }
 
 TEST(Index, Simple) {
     auto df = DataFrame<int, float>{
-        .tags = {1,   2,   3,   4  },
-          .values = {10., 20., 30., 40.}
+        {1,   2,   3,   4  },
+        {10., 20., 30., 40.}
     };
 
     auto i = DataFrame<int, float>{
-        .tags = {2,    3   },
-          .values = {-20., -30.}
+        {2,    3   },
+        {-20., -30.}
     };
 
     auto g = materialize(df[i]);
 
     EXPECT_EQ(g.size(), 2);
-    EXPECT_EQ(g.tags, (std::vector<int>{2, 3}));
-    EXPECT_EQ(g.values, (std::vector<float>{20., 30.}));
+    EXPECT_EQ(*g.tags, (std::vector<int>{2, 3}));
+    EXPECT_EQ(*g.values, (std::vector<float>{20., 30.}));
 }
 
 TEST(Index, NoValues) {
     auto df = DataFrame<int, float>{
-        .tags = {1,   2,   3,   4  },
-          .values = {10., 20., 30., 40.}
+        {1,   2,   3,   4  },
+        {10., 20., 30., 40.}
     };
 
-    auto i = DataFrame<int, NoValue>{
-        .tags = {2, 3}
-    };
+    auto i = DataFrame<int, NoValue>({2, 3}, {});
 
     auto g = materialize(df[i]);
 
     EXPECT_EQ(g.size(), 2);
 
-    EXPECT_EQ(g.tags, (std::vector<int>{2, 3}));
-    EXPECT_EQ(g.values, (std::vector<float>{20., 30.}));
+    EXPECT_EQ(*g.tags, (std::vector<int>{2, 3}));
+    EXPECT_EQ(*g.values, (std::vector<float>{20., 30.}));
 }
 
 TEST(Reduce, sum) {
@@ -94,8 +99,8 @@ TEST(Reduce, sum) {
 
     auto g = materialize(Reduce::sum(df));
 
-    EXPECT_EQ(g.tags, (std::vector<int>{1, 2, 3}));
-    EXPECT_EQ(g.values, (std::vector<float>{10., 120., 30.}));
+    EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
+    EXPECT_EQ(*g.values, (std::vector<float>{10., 120., 30.}));
 }
 
 TEST(Reduce, max) {
@@ -104,10 +109,22 @@ TEST(Reduce, max) {
         {10., 20., 100., 30.}
     };
 
+    auto g = materialize(Reduce::max(df));
+
+    EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
+    EXPECT_EQ(*g.values, (std::vector<float>{10., 100., 30.}));
+}
+
+TEST(Reduce, max_manual) {
+    auto df = DataFrame<int, float>{
+        {1,   2,   2,    3  },
+        {10., 20., 100., 30.}
+    };
+
     auto g = materialize(Reduce::reduce(df, [](float a, float b) { return a > b ? a : b; }));
 
-    EXPECT_EQ(g.tags, (std::vector<int>{1, 2, 3}));
-    EXPECT_EQ(g.values, (std::vector<float>{10., 100., 30.}));
+    EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
+    EXPECT_EQ(*g.values, (std::vector<float>{10., 100., 30.}));
 }
 
 TEST(Join, SimplePair) {
@@ -123,27 +140,27 @@ TEST(Join, SimplePair) {
     auto g = materialize(Join::collate(df1, df2, [](float v1, float v2) { return std::pair(v1, v2); }));
 
     EXPECT_EQ(g.size(), 3);
-    EXPECT_EQ(g.tags, (std::vector<int>{1, 2, 3}));
-    EXPECT_EQ(g.values[0], std::pair(10.f, -11.f));
-    EXPECT_EQ(g.values[1], std::pair(20.f, -22.f));
-    EXPECT_EQ(g.values[2], std::pair(30.f, -33.f));
+    EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
+    EXPECT_EQ((*g.values)[0], std::pair(10.f, -11.f));
+    EXPECT_EQ((*g.values)[1], std::pair(20.f, -22.f));
+    EXPECT_EQ((*g.values)[2], std::pair(30.f, -33.f));
 }
 
 TEST(Join, Reduced) {
     auto df1 = DataFrame<int, float>{
-        .tags = {0,   0,   1  },
-          .values = {10., 20., 30.}
+        {0,   0,   1  },
+        {10., 20., 30.}
     };
     auto df2 = DataFrame<int, float>{
-        .tags = {0,    1,    1   },
-          .values = {-11., -22., -33.}
+        {0,    1,    1   },
+        {-11., -22., -33.}
     };
 
     auto g = materialize(Join::sum(Reduce::sum(df1), Reduce::sum(df2)));
 
     EXPECT_EQ(g.size(), 2);
-    EXPECT_EQ(g.tags, (std::vector<int>{0, 1}));
-    EXPECT_EQ(g.values, (std::vector<float>{19., -25.}));
+    EXPECT_EQ(*g.tags, (std::vector<int>{0, 1}));
+    EXPECT_EQ(*g.values, (std::vector<float>{19., -25.}));
 }
 
 TEST(Join, ReducedLeftDuplicates) {
@@ -160,8 +177,8 @@ TEST(Join, ReducedLeftDuplicates) {
 
     EXPECT_EQ(g.size(), 3);
 
-    EXPECT_EQ(g.tags, (std::vector<int>{1, 2, 3}));
-    EXPECT_EQ(g.values, (std::vector<float>{-1., 98., -3.}));
+    EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
+    EXPECT_EQ(*g.values, (std::vector<float>{-1., 98., -3.}));
 }
 
 TEST(Join, Strings) {
@@ -176,8 +193,8 @@ TEST(Join, Strings) {
 
     auto g = materialize(Join::sum(df1, df2));
 
-    EXPECT_EQ(g.tags, df1.tags);
-    EXPECT_EQ(g.values, std::vector<float>({11., 22.}));
+    EXPECT_EQ(*g.tags, *df1.tags);
+    EXPECT_EQ(*g.values, std::vector<float>({11., 22.}));
 }
 
 struct O1 {
@@ -216,9 +233,9 @@ TEST(Join, Structs) {
 
     auto g = materialize(Join::collate(df1, df2, [](const O1 &left, const O2 &right) { return O3(left, right); }));
 
-    EXPECT_EQ(g.tags, df1.tags);
-    EXPECT_EQ(g.values[0], O3(O1{"green", 6}, O2{18}));
-    EXPECT_EQ(g.values[1], O3(O1{"blue", 10}, O2{32}));
+    EXPECT_EQ(*g.tags, *df1.tags);
+    EXPECT_EQ((*g.values)[0], O3(O1{"green", 6}, O2{18}));
+    EXPECT_EQ((*g.values)[1], O3(O1{"blue", 10}, O2{32}));
 }
 
 TEST(Columnar, Simple) {
@@ -237,27 +254,27 @@ TEST(Columnar, Simple) {
     auto toes_per_tooth = materialize(Join::collate(
         df.num_toes, df.num_teeth, [](int num_toes, int num_teeth) { return float(num_toes) / num_teeth; }));
     EXPECT_EQ(toes_per_tooth.size(), 2);
-    EXPECT_EQ(toes_per_tooth.values[0], 6.f / 18);
-    EXPECT_EQ(toes_per_tooth.values[1], 10.f / 32);
+    EXPECT_EQ((*toes_per_tooth.values)[0], 6.f / 18);
+    EXPECT_EQ((*toes_per_tooth.values)[1], 10.f / 32);
 }
 
 TEST(RangeTags, advance_to_tag) {
     auto df = DataFrame<RangeTag, int>{
-        .tags = {5},
-          .values = {-1, -2, -3, -4, -5}
+        {5},
+        {-1, -2, -3, -4, -5}
     };
     auto edf = to_expr(df);
 
     edf.advance_to_tag(3);
 
-    EXPECT_EQ(df.tags[edf.i], 3);
-    EXPECT_EQ(df.values[edf.i], -4);
+    EXPECT_EQ((*df.tags)[edf.i], 3);
+    EXPECT_EQ((*df.values)[edf.i], -4);
 }
 
 TEST(RangeTags, advance_to_tag_Missing) {
     auto df = DataFrame<RangeTag, int>{
-        .tags = {5},
-          .values = {-1, -2, -3, -4, -5}
+        {5},
+        {-1, -2, -3, -4, -5}
     };
     auto edf = to_expr(df);
 
@@ -268,14 +285,12 @@ TEST(RangeTags, advance_to_tag_Missing) {
 
 TEST(RangeTags, Indexing) {
     auto df = DataFrame<RangeTag, int>{
-        .tags = {5},
-          .values = {-1, -2, -3, -4, -5}
+        {5},
+        {-1, -2, -3, -4, -5}
     };
-    auto i = DataFrame<size_t, NoValue>{
-        {2, 3}
-    };
+    auto i = DataFrame<size_t, NoValue>({2, 3}, {});
     auto c = materialize(df[i]);
 
-    EXPECT_EQ(c.tags, (std::vector<size_t>{2, 3}));
-    EXPECT_EQ(c.values, (std::vector<int>{-3, -4}));
+    EXPECT_EQ(*c.tags, (std::vector<size_t>{2, 3}));
+    EXPECT_EQ(*c.values, (std::vector<int>{-3, -4}));
 }
