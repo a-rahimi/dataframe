@@ -158,37 +158,31 @@ struct Expr_Intersection {
     using Tag = decltype(merge_op(df1.tag, df2.tag, df1.value, df2.value).first);
     using Value = decltype(merge_op(df1.tag, df2.tag, df1.value, df2.value).second);
 
-    Expr1 df1_next;
-    Expr2 df2_next;
     Tag tag;
     Value value;
+    bool _end;
 
     Expr_Intersection(Expr1 _df1, Expr2 _df2, MergeOp _merge_op)
-        : df1(_df1), df2(_df2), merge_op(_merge_op), df1_next(_df1), df2_next(_df2) {
-        compute_tagvalue();
+        : df1(_df1), df2(_df2), merge_op(_merge_op), _end(false) {
+        next();
     }
 
-    void compute_tagvalue() {
-        while (!df2_next.end()) {
-            df1_next.advance_to_tag(df2_next.tag);
-            if (df1_next.end())
+    void next() {
+        _end = df2.end();
+        while (!df2.end()) {
+            df1.advance_to_tag(df2.tag);
+            if (df1.end())
                 continue;
 
-            auto tagvalue = merge_op(df1_next.tag, df2_next.tag, df1_next.value, df2_next.value);
+            auto tagvalue = merge_op(df1.tag, df2.tag, df1.value, df2.value);
             tag = tagvalue.first;
             value = tagvalue.second;
-            df2_next.next();
+            df2.next();
             break;
         }
     }
 
-    bool end() const { return df2.end(); }
-
-    void next() {
-        df1 = df1_next;
-        df2 = df2_next;
-        compute_tagvalue();
-    }
+    bool end() const { return _end; }
 
     void advance_to_tag(Tag t) { advance_to_tag_by_linear_search(*this, t); }
 };
