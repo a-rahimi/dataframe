@@ -12,14 +12,6 @@ struct NoTag {};
 
 struct NoValue {};
 
-template <typename Tag, typename Value>
-struct IndexMergeOp {
-    template <typename ValueOther>
-    auto operator()(Tag tag, Tag, Value v, ValueOther) const {
-        return std::pair(tag, v);
-    }
-};
-
 template <typename _Tag, typename _Value>
 struct DataFrame {
     using Tag = _Tag;
@@ -36,7 +28,8 @@ struct DataFrame {
 
     template <typename ValueOther>
     auto operator[](const DataFrame<Tag, ValueOther> &index) {
-        return Expr_Intersection(to_expr(*this), to_expr(index), IndexMergeOp<Tag, Value>());
+        return Expr_Intersection(
+            to_expr(*this), to_expr(index), [](Tag tag, Tag, Value v, ValueOther) { return std::pair(tag, v); });
     }
 };
 
@@ -80,7 +73,8 @@ struct DataFrame<RangeTag, _Value> {
 
     template <typename ValueOther>
     auto operator[](const DataFrame<size_t, ValueOther> &index) {
-        return Expr_Intersection(to_expr(*this), to_expr(index), IndexMergeOp<size_t, Value>());
+        return Expr_Intersection(
+            to_expr(*this), to_expr(index), [](size_t tag, size_t, Value v, ValueOther) { return std::pair(tag, v); });
     }
 };
 
