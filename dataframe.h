@@ -1,10 +1,10 @@
 #include <algorithm>
-#include <iostream>
 #include <memory>
 #include <utility>
 #include <vector>
 
 #include "expressions.h"
+#include "formatting.h"
 
 struct RangeTag {};
 
@@ -50,13 +50,6 @@ auto materialize(Expr edf) {
     return mdf;
 }
 
-template <typename Tag, typename Value>
-std::ostream &operator<<(std::ostream &s, const DataFrame<Tag, Value> &df) {
-    for (size_t i = 0; i < df.size(); ++i)
-        s << df.tags[i] << '\t' << df.values[i] << std::endl;
-    return s;
-}
-
 // A std::vector for sequential tags. Instead of storing the tag values,
 // computes them as needed.
 template <>
@@ -97,15 +90,6 @@ template <>
 struct std::vector<NoValue> {
     auto operator[](size_t i) const { return NoValue(); }
 };
-
-template <typename Tag>
-std::ostream &operator<<(std::ostream &s, const DataFrame<Tag, NoValue> &df) {
-    s << '[';
-    for (size_t i = 0; i < df.size(); ++i)
-        s << df.tags[i] << ", ";
-    s << ']';
-    return s;
-}
 
 namespace Reduce {
 template <typename ReduceOp>
