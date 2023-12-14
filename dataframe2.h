@@ -101,26 +101,24 @@ struct Expr_Reduction {
 
     Tag tag;
     Value value;
-    Expr df_next;
+    bool _end;
 
-    Expr_Reduction(Expr _df, ReduceOp _reduce_op) : df(_df), reduce_op(_reduce_op), df_next(df) { compute_tagvalue(); }
+    Expr_Reduction(Expr _df, ReduceOp _reduce_op) : df(_df), reduce_op(_reduce_op), _end(false) { next(); }
 
-    void compute_tagvalue() {
+    void next() {
+        _end = df.end();
+
+        Tag current_tag = df.tag;
         auto accumulation = reduce_op(df.tag, df.value);
 
-        for (df_next.next(); !df_next.end() && (df.tag == df_next.tag); df_next.next())
-            accumulation = reduce_op(df_next.tag, accumulation.first, df_next.value, accumulation.second);
+        for (df.next(); !df.end() && (df.tag == current_tag); df.next())
+            accumulation = reduce_op(df.tag, accumulation.first, df.value, accumulation.second);
 
         tag = accumulation.first;
         value = accumulation.second;
     }
 
-    bool end() const { return df.end(); }
-
-    void next() {
-        df = df_next;
-        compute_tagvalue();
-    }
+    bool end() const { return _end; }
 
     void advance_to_tag(Tag t) { advance_to_tag_by_linear_search(*this, t); }
 };
