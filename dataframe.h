@@ -12,6 +12,15 @@ struct NoTag {};
 
 struct NoValue {};
 
+/* A materialized dataframe.
+
+Dataframes are light-weight to copy because they're copied by reference.
+Dataframes contain at most two reference-counted pointers, one to a tags array
+(unless the tags are RangeTags, in which the tags array is not explicitly
+stored) , and one to a values array (unless the value type is NoValue). Copy a
+dataframe, or passing it by reference copies these arrays. Notably, modifying a
+copy of a dataframe modifies the tags and values of the original.
+*/
 template <typename _Tag, typename _Value>
 struct DataFrame {
     using Tag = _Tag;
@@ -127,8 +136,7 @@ struct ReduceAdaptor {
 
     template <typename Tag, typename Value>
     auto operator()(Tag t, Value v) {
-        using ValueOutput = decltype(op(v, v));
-        return std::pair(t, ValueOutput(v));
+        return std::pair(t, decltype(op(v, v))(v));
     }
 
     template <typename Tag, typename Value, typename ValueAccumulator>

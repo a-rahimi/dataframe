@@ -109,6 +109,13 @@ All operations on a dataframe are defined in terms of three basic operations:
   into one entry. This combination operation is a reduction with a user-supplied
   binary operator. This operation resembles a group-by operation in SQL.
 
+Under the hood, these operators produce one entry of their output dataframe, and
+return. When you chain together, say an Expr_Union and an Expr_Reduce, you're
+actually constructing an object that generates one entry of a new dataframe at a
+time by sequentially invoking Expr_Union, which then invokves Expr_Reduce for
+each row of the dataframe. This way, we avoid producing a temporary dataframe
+for Expr_Reduce first, and feeding this temporary to Expr_Union, only to then
+delete Expr_Reduce's output.
 
 Unlike traditional dataframes, this package does not take a position on row-wise
 vs columnar storage. Its dataframe are 1D vectors.  When the elements of these
