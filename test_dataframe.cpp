@@ -35,6 +35,7 @@ TEST(DataFrame, scalar_index_TagValue) {
     EXPECT_EQ(df[3].t, 4);
     EXPECT_EQ(df[3].v, 40.);
 }
+
 TEST(DataFrame, scalar_index_TagValue_modifiable) {
     auto df = DataFrame<int, float>({1, 2, 3, 4}, {10., 20., 30., 40.});
 
@@ -77,6 +78,8 @@ TEST(Expr_DataFrame, materialize) {
 
     auto df = materialize(edf);
 
+    EXPECT_NE(df.tags, original_df.tags);
+    EXPECT_NE(df.values, original_df.values);
     EXPECT_EQ(*df.tags, *original_df.tags);
     EXPECT_EQ(*df.values, *original_df.values);
 }
@@ -263,8 +266,9 @@ TEST(RangeTags, advance_to_tag) {
 
     edf.advance_to_tag(3);
 
-    EXPECT_EQ(df[edf.i].t, 3);
-    EXPECT_EQ(df[edf.i].v, -4);
+    auto [t, v] = df[edf.i];
+    EXPECT_EQ(t, 3);
+    EXPECT_EQ(v, -4);
 }
 
 TEST(RangeTags, advance_to_tag_Missing) {
