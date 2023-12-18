@@ -58,10 +58,15 @@ GB-ENG-222	JADOO	2	11.728999999999999	13.0810	5.8220	129.6400	148.5430	DEFAULT	1
 };
 
 int main() {
-    std::vector<Task> tasks;
-    read_tsv(tasks, "3816f181-7751-4146-ae5e-43a7afdd9a37-0.tsv");
+    auto tasks = read_tsv<Task>("3816f181-7751-4146-ae5e-43a7afdd9a37-0.tsv");
 
     std::cout << "read " << tasks.size() << " tasks" << std::endl;
     std::cout << "total size " << tasks.size() * sizeof(Task) / 1024 / 1024 << " MB.\n";
-    std::cout << tasks[0] << std::endl;
+    std::cout << tasks[0].v;
+
+    auto tagged_tasks = retag(tasks, [](size_t, const Task& t) { return t.associate_id; });
+
+    std::cout << "First and last tasks after tagging with associate_id:\n";
+    std::cout << tagged_tasks[0].v;
+    std::cout << tagged_tasks[tagged_tasks.size() - 1].v;
 }

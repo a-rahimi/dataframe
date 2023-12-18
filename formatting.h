@@ -77,3 +77,10 @@ void read_tsv(Container& records, const std::string& tsv_filename, int header_li
         records.push_back(line_string_view);
     }
 }
+
+template <typename T, typename... TSVArgs>
+DataFrame<RangeTag, T> read_tsv(const std::string& tsv_filename, TSVArgs... args) {
+    DataFrame<RangeTag, T> df;
+    read_tsv(*df.values, tsv_filename, args...);
+    return df;
+}

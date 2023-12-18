@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <memory>
+#include <numeric>
 #include <utility>
 #include <vector>
 
@@ -90,6 +91,8 @@ struct DataFrame<RangeTag, _Value> {
     std::shared_ptr<std::vector<RangeTag>> tags;
     std::shared_ptr<std::vector<Value>> values;
 
+    DataFrame() : tags(new std::vector<RangeTag>), values(new std::vector<Value>) {}
+
     DataFrame(const std::vector<Value> &_values)
         : tags(new std::vector<RangeTag>{_values.size()}), values(new auto(_values)) {}
 
@@ -119,6 +122,45 @@ struct DataFrame<RangeTag, _Value> {
         return TagValueConst{i, (*values)[i]};
     }
 };
+
+template <typename Tag, typename Value>
+auto sort_tags(DataFrame<Tag, Value> df) {
+    // A sequence of numbers from 0...|df|
+    size_t indices[df.size()];
+    std::iota(indices, indices + df.size(), 0);
+
+    // Sort the sequence but use the dataframe's tags to compare.
+    const auto &tags = *df.tags;
+    const auto &values = *df.values;
+    std::sort(indices, indices + df.size(), [tags](size_t a, size_t b) { return tags[a] < tags[b]; });
+
+    // Create a new dataframe from scratch with the entries reordered.
+    DataFrame<Tag, Value> dfnew;
+    dfnew.tags->reserve(df.size());
+    dfnew.values->reserve(df.size());
+
+    for (size_t i = 0; i < df.size(); ++i) {
+        dfnew.tags->push_back(tags[indices[i]]);
+        dfnew.values->push_back(values[indices[i]]);
+    }
+    return dfnew;
+}
+
+template <typename Tag, typename Value, typename TagOp>
+auto retag(DataFrame<Tag, Value> df, TagOp compute_tag) {
+    // Create an emtpy dataframe.
+    using TagOut = decltype(compute_tag((*df.tags)[0], (*df.values)[0]));
+    DataFrame<TagOut, Value> dfo;
+
+    // shallow-copy the old values.
+    dfo.values = df.values;
+
+    // create a new tags array from scratch with the computed tags.
+    for (size_t i = 0; i < df.size(); ++i)
+        dfo.tags->push_back(compute_tag((*df.tags)[i], (*df.values)[i]));
+
+    return sort_tags(dfo);
+}
 
 // DataFrames of type NoValue use a special version of std::vector that takes up
 // no space.
