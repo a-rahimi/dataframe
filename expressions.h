@@ -86,8 +86,8 @@ struct Expr_Reduction {
     Expr df;
     ReduceOp reduce_op;
 
-    using Tag = decltype(reduce_op(df.tag, df.tag, df.value, df.value).first);
-    using Value = decltype(reduce_op(df.tag, df.tag, df.value, df.value).second);
+    using Tag = typename Expr::Tag;
+    using Value = decltype(reduce_op(df.tag, df.value));
 
     Tag tag;
     Value value;
@@ -98,19 +98,50 @@ struct Expr_Reduction {
     void next() {
         _end = df.end();
 
-        Tag current_tag = df.tag;
+        tag = df.tag;
         auto accumulation = reduce_op(df.tag, df.value);
 
-        for (df.next(); !df.end() && (df.tag == current_tag); df.next())
-            accumulation = reduce_op(df.tag, accumulation.first, df.value, accumulation.second);
+        for (df.next(); !df.end() && (df.tag == tag); df.next())
+            accumulation = reduce_op(df.tag, df.value, accumulation);
 
-        tag = accumulation.first;
-        value = accumulation.second;
+        value = accumulation;
     }
 
     bool end() const { return _end; }
 
     void advance_to_tag(Tag t) { advance_to_tag_by_linear_search(*this, t); }
+};
+
+// Applies a function to every entry of a dataframe.
+template <typename Expr, typename Op>
+struct Expr_Apply {
+    Expr df;
+    Op op;
+
+    using Tag = typename Expr::Tag;
+    using Value = decltype(op(df.tag, df.value));
+
+    Tag tag;
+    Value value;
+    bool _end;
+
+    Expr_Apply(Expr _df, Op _op) : df(_df), op(_op), _end(false) { next(); }
+
+    void next() {
+        _end = df.end();
+
+        tag = df.tag;
+        value = op(df.tag, df.value);
+
+        df.next();
+    }
+
+    bool end() const { return _end; }
+
+    void advance_to_tag(Tag t) {
+        df.advance_to_tag(t);
+        next();
+    }
 };
 
 // Inner join two dataframes.

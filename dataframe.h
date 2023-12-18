@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <numeric>
 #include <utility>
@@ -170,39 +171,54 @@ struct std::vector<NoValue> {
 };
 
 namespace Reduce {
-template <typename ReduceOp>
+template <typename ReduceOp, typename InitOp>
 struct ReduceAdaptor {
     ReduceOp op;
+    InitOp initop;
 
-    ReduceAdaptor(ReduceOp _op) : op(_op) {}
+    ReduceAdaptor(ReduceOp _op, InitOp _initop) : op(_op), initop(_initop) {}
 
     template <typename Tag, typename Value>
-    auto operator()(Tag t, Value v) {
-        return std::pair(t, decltype(op(v, v))(v));
+    auto operator()(Tag, Value v1) {
+        return initop(v1);
     }
 
     template <typename Tag, typename Value, typename ValueAccumulator>
-    auto operator()(Tag t1, Tag, Value v1, ValueAccumulator v2) {
-        return std::pair(t1, op(v1, v2));
+    auto operator()(Tag, Value v1, ValueAccumulator v2) {
+        return op(v1, v2);
     }
 };
 
-template <typename Expr, typename ReduceOp>
-static auto reduce(Expr df, ReduceOp op) {
-    return Expr_Reduction(to_expr(df), ReduceAdaptor(op));
+template <typename Expr, typename ReduceOp, typename ValueAccumulator>
+static auto reduce(Expr df, ReduceOp op, ValueAccumulator init) {
+    return Expr_Reduction(to_expr(df), ReduceAdaptor(op, init));
+}
+
+template <typename Expr>
+static auto count(Expr df) {
+    return reduce(
+        df, [](const Expr::Value &, size_t acc) { return acc + 1; }, [](const Expr::Value &) { return size_t(1); });
 }
 
 template <typename Expr>
 static auto sum(Expr df) {
-    return reduce(df, std::plus<>());
+    return reduce(df, std::plus<>(), std::identity());
 }
 
 template <typename Expr>
 static auto max(Expr df) {
-    return reduce(df, [](typename Expr::Value v1, typename Expr::Value v2) { return v1 > v2 ? v1 : v2; });
+    return reduce(
+        df, [](typename Expr::Value v1, typename Expr::Value v2) { return v1 > v2 ? v1 : v2; }, std::identity());
 }
 
 };  // namespace Reduce
+
+namespace Apply {
+template <typename Expr, typename Op>
+auto all(Expr df, Op op) {
+    return Expr_Apply(to_expr(df), op);
+}
+}  // namespace Apply
 
 namespace Join {
 template <typename CollateOp>

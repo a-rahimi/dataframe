@@ -3,6 +3,7 @@ Compile this demo with
 
    clang++ -Wall -std=c++2b  test_dataframe2.cpp  -lgtest_main -lgtest
 */
+
 #include <gtest/gtest.h>
 
 #include <string>
@@ -136,13 +137,57 @@ TEST(Reduce, max) {
     EXPECT_EQ(*g.values, (std::vector<float>{10., 100., 30.}));
 }
 
+TEST(Reduce, count) {
+    auto df = DataFrame<int, float>{
+        {1,   2,   2,    3  },
+        {10., 20., 100., 30.}
+    };
+
+    auto g = materialize(Reduce::count(df));
+
+    EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
+    EXPECT_EQ(*g.values, (std::vector<size_t>{1, 2, 1}));
+}
+
 TEST(Reduce, max_manual) {
     auto df = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
 
-    auto g = materialize(Reduce::reduce(df, [](float a, float b) { return a > b ? a : b; }));
+    auto g = materialize(Reduce::reduce(
+        df, [](float a, float b) { return a > b ? a : b; }, [](float a) { return a; }));
 
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
     EXPECT_EQ(*g.values, (std::vector<float>{10., 100., 30.}));
+}
+
+TEST(Apply, divide_by_2) {
+    auto df = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
+
+    auto g = materialize(Apply::all(df, [](int tag, float v) { return v / 2; }));
+
+    EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 2, 3}));
+    EXPECT_EQ(*g.values, (std::vector<float>{5., 10., 50., 15.}));
+}
+
+TEST(Apply, find_tag) {
+    auto df = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
+
+    auto expr = Apply::all(df, [](int tag, float v) { return v / 2; });
+    expr.advance_to_tag(2);
+    auto g = materialize(expr);
+
+    EXPECT_EQ(*g.tags, (std::vector<int>{2, 2, 3}));
+    EXPECT_EQ(*g.values, (std::vector<float>{10., 50., 15.}));
+}
+
+TEST(Apply, find_tag_last) {
+    auto df = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
+
+    auto expr = Apply::all(df, [](int tag, float v) { return v / 2; });
+    expr.advance_to_tag(3);
+    auto g = materialize(expr);
+
+    EXPECT_EQ(*g.tags, (std::vector<int>{3}));
+    EXPECT_EQ(*g.values, (std::vector<float>{15.}));
 }
 
 TEST(Join, SimplePair) {
