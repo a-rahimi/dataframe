@@ -250,6 +250,18 @@ struct EmptyTagAdaptor {
     }
 };
 
+template <typename CollateOp>
+struct CollateAdaptor {
+    CollateOp op;
+
+    CollateAdaptor(CollateOp _op) : op(_op) {}
+
+    template <typename Tag1, typename Tag2, typename Value1, typename Value2>
+    auto operator()(Tag1 t1, Tag2, Value1 v1, Value2 v2) {
+        return std::pair(t1, op(v1, v2));
+    }
+};
+
 template <typename Derived>
 struct Operations {
     auto to_expr() { return ::to_expr(static_cast<Derived &>(*this)); }
@@ -298,5 +310,15 @@ struct Operations {
 
     auto reduce_max() {
         return reduce([](Derived::Value v1, Derived::Value v2) { return v1 > v2 ? v1 : v2; }, std::identity());
+    }
+
+    template <typename Expr, typename CollateOp>
+    auto collate(Expr df_other, CollateOp op) {
+        return Expr_Intersection(to_expr(), df_other.to_expr(), CollateAdaptor(op));
+    }
+
+    template <typename Expr>
+    auto collate_sum(Expr df_other) {
+        return Expr_Intersection(to_expr(), df_other.to_expr(), CollateAdaptor(std::plus<>()));
     }
 };

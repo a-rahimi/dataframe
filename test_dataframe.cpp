@@ -235,11 +235,11 @@ TEST(Apply, find_tag_last) {
     EXPECT_EQ(*g.values, (std::vector<float>{15.}));
 }
 
-TEST(Join, SimplePair) {
+TEST(Collate, SimplePair) {
     auto df1 = DataFrame<int, float>({1, 2, 3}, {10., 20., 30.});
     auto df2 = DataFrame<int, float>({1, 2, 3}, {-11., -22., -33.});
 
-    auto g = materialize(Join::collate(df1, df2, [](float v1, float v2) { return std::pair(v1, v2); }));
+    auto g = materialize(df1.collate(df2, [](float v1, float v2) { return std::pair(v1, v2); }));
 
     EXPECT_EQ(g.size(), 3);
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
@@ -248,22 +248,22 @@ TEST(Join, SimplePair) {
     EXPECT_EQ(g[2].v, std::pair(30.f, -33.f));
 }
 
-TEST(Join, Reduced) {
+TEST(Collate, ReducedSum) {
     auto df1 = DataFrame<int, float>({0, 0, 1}, {10., 20., 30.});
     auto df2 = DataFrame<int, float>({0, 1, 1}, {-11., -22., -33.});
 
-    auto g = materialize(Join::sum(df1.reduce_sum(), df2.reduce_sum()));
+    auto g = materialize(df1.reduce_sum().collate_sum(df2.reduce_sum()));
 
     EXPECT_EQ(g.size(), 2);
     EXPECT_EQ(*g.tags, (std::vector<int>{0, 1}));
     EXPECT_EQ(*g.values, (std::vector<float>{19., -25.}));
 }
 
-TEST(Join, ReducedLeftDuplicates) {
+TEST(Collate, ReducedLeftDuplicates) {
     auto df1 = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
     auto df2 = DataFrame<int, float>({1, 2, 3}, {-11., -22., -33.});
 
-    auto g = materialize(Join::sum(df1.reduce_sum(), df2.reduce_sum()));
+    auto g = materialize(df1.reduce_sum().collate_sum(df2.reduce_sum()));
 
     EXPECT_EQ(g.size(), 3);
 
@@ -271,11 +271,11 @@ TEST(Join, ReducedLeftDuplicates) {
     EXPECT_EQ(*g.values, (std::vector<float>{-1., 98., -3.}));
 }
 
-TEST(Join, Strings) {
+TEST(Collate, Strings) {
     auto df1 = DataFrame<std::string, float>({"ali", "john"}, {1., 2.});
     auto df2 = DataFrame<std::string, float>({"ali", "john"}, {10., 20.});
 
-    auto g = materialize(Join::sum(df1, df2));
+    auto g = materialize(df1.collate_sum(df2));
 
     EXPECT_EQ(*g.tags, *df1.tags);
     EXPECT_EQ(*g.values, std::vector<float>({11., 22.}));
@@ -304,7 +304,7 @@ struct O3 : O1, O2 {
     }
 };
 
-TEST(Join, Structs) {
+TEST(Collate, Structs) {
     auto df1 = DataFrame<std::string, O1>{
         {"ali",                                        "john"                                      },
         {O1{.favorite_color = "green", .num_toes = 6}, O1{.favorite_color = "blue", .num_toes = 10}}
@@ -315,7 +315,7 @@ TEST(Join, Structs) {
         {O2{.num_teeth = 18}, O2{.num_teeth = 32}}
     };
 
-    auto g = materialize(Join::collate(df1, df2, [](const O1 &left, const O2 &right) { return O3(left, right); }));
+    auto g = materialize(df1.collate(df2, [](const O1 &left, const O2 &right) { return O3(left, right); }));
 
     EXPECT_EQ(*g.tags, *df1.tags);
     EXPECT_EQ(g[0].v, O3(O1{"green", 6}, O2{18}));
@@ -335,8 +335,8 @@ TEST(Columnar, Simple) {
         {tags, {18, 32}         }
     };
 
-    auto toes_per_tooth = materialize(Join::collate(
-        df.num_toes, df.num_teeth, [](int num_toes, int num_teeth) { return float(num_toes) / num_teeth; }));
+    auto toes_per_tooth = materialize(
+        df.num_toes.collate(df.num_teeth, [](int num_toes, int num_teeth) { return float(num_toes) / num_teeth; }));
     EXPECT_EQ(toes_per_tooth.size(), 2);
     EXPECT_EQ(toes_per_tooth[0].v, 6.f / 18);
     EXPECT_EQ(toes_per_tooth[1].v, 10.f / 32);
