@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <numeric>
@@ -195,6 +196,27 @@ static auto reduce(Expr df, ReduceOp op, ValueAccumulator init) {
 }
 
 template <typename Expr>
+auto moments(Expr df) {
+    struct Moments {
+        size_t count;
+        Expr::Value sum;
+        Expr::Value sum_squares;
+
+        auto mean() const { return sum / count; }
+        auto var() const { return sum_squares / count - mean() * mean(); }
+        auto std() const { return std::sqrt(var()); }
+
+        Moments operator()(Expr::Tag, Expr::Value v) { return Moments{1, v, v * v}; }
+
+        Moments operator()(Expr::Tag, Expr::Value v, const Moments &m) {
+            return Moments{m.count + 1, m.sum + v, m.sum_squares + v * v};
+        }
+    };
+
+    return Expr_Reduction(to_expr(df), Moments());
+}
+
+template <typename Expr>
 static auto count(Expr df) {
     return reduce(
         df, [](const Expr::Value &, size_t acc) { return acc + 1; }, [](const Expr::Value &) { return size_t(1); });
@@ -214,9 +236,27 @@ static auto max(Expr df) {
 };  // namespace Reduce
 
 namespace Apply {
+
+// TODO: This adaptor just throws away the first argument of op. Is there a way to
+// do this more simply with std::bind?
+template <typename Op>
+struct OpAdaptor {
+    Op op;
+    OpAdaptor(Op _op) : op(_op) {}
+    template <typename Tag, typename Value>
+    auto operator()(const Tag &t, const Value &v) {
+        return op(v);
+    }
+};
+
 template <typename Expr, typename Op>
-auto all(Expr df, Op op) {
+auto tag_and_value(Expr df, Op op) {
     return Expr_Apply(to_expr(df), op);
+}
+
+template <typename Expr, typename Op>
+auto value(Expr df, Op op) {
+    return Expr_Apply(to_expr(df), OpAdaptor(op));
 }
 }  // namespace Apply
 

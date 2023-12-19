@@ -16,7 +16,7 @@ struct NoValue;
 template <typename Tag, typename Value>
 std::ostream& operator<<(std::ostream& s, const DataFrame<Tag, Value>& df) {
     for (size_t i = 0; i < df.size(); ++i)
-        s << df.tags[i] << '\t' << df.values[i] << std::endl;
+        s << df[i].t << '\t' << df[i].v << std::endl;
     return s;
 }
 
@@ -24,7 +24,7 @@ template <typename Tag>
 std::ostream& operator<<(std::ostream& s, const DataFrame<Tag, NoValue>& df) {
     s << '[';
     for (size_t i = 0; i < df.size(); ++i)
-        s << df.tags[i] << ", ";
+        s << (*df.tags)[i] << ", ";
     s << ']';
     return s;
 }
@@ -74,7 +74,9 @@ void read_tsv(Container& records, const std::string& tsv_filename, int header_li
         auto line_string_view = get_line(line, sizeof(line), tsv.get());
         if (line_string_view.empty())
             break;
-        records.push_back(line_string_view);
+        typename Container::value_type item;
+        from_tab_separated_string(item, line_string_view);
+        records.push_back(item);
     }
 }
 

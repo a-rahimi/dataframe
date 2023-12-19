@@ -159,6 +159,52 @@ TEST(Reduce, max_manual) {
     EXPECT_EQ(*g.values, (std::vector<float>{10., 100., 30.}));
 }
 
+TEST(Reduce, moments) {
+    auto df = DataFrame<int, float>({1, 2, 2, 3}, {10., 1., 2., 30.});
+
+    auto g = materialize(Reduce::moments(df));
+
+    EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
+    EXPECT_EQ(g[0].v.count, 1);
+    EXPECT_EQ(g[1].v.count, 2);
+    EXPECT_EQ(g[2].v.count, 1);
+
+    EXPECT_EQ(g[0].v.sum, 10.);
+    EXPECT_EQ(g[1].v.sum, 3.);
+    EXPECT_EQ(g[2].v.sum, 30.);
+
+    EXPECT_EQ(g[0].v.sum_squares, 100.);
+    EXPECT_EQ(g[1].v.sum_squares, 5.);
+    EXPECT_EQ(g[2].v.sum_squares, 900.);
+
+    EXPECT_EQ(g[0].v.mean(), 10.);
+    EXPECT_EQ(g[1].v.mean(), 1.5);
+    EXPECT_EQ(g[2].v.mean(), 30.);
+
+    EXPECT_EQ(g[0].v.var(), 0.);
+    EXPECT_EQ(g[1].v.var(), .25);
+    EXPECT_EQ(g[2].v.var(), 0.);
+}
+
+TEST(Reduce, moments_apply) {
+    auto df = DataFrame<int, float>({1, 2, 2, 3}, {20., 2., 4., 60.});
+
+    auto g = materialize(Reduce::moments(Apply::all(df, [](int t, float v) { return v / 2; })));
+
+    EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
+    EXPECT_EQ(g[0].v.count, 1);
+    EXPECT_EQ(g[1].v.count, 2);
+    EXPECT_EQ(g[2].v.count, 1);
+
+    EXPECT_EQ(g[0].v.sum, 10.);
+    EXPECT_EQ(g[1].v.sum, 3.);
+    EXPECT_EQ(g[2].v.sum, 30.);
+
+    EXPECT_EQ(g[0].v.sum_squares, 100.);
+    EXPECT_EQ(g[1].v.sum_squares, 5.);
+    EXPECT_EQ(g[2].v.sum_squares, 900.);
+}
+
 TEST(Apply, divide_by_2) {
     auto df = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
 
