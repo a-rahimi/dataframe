@@ -321,4 +321,9 @@ struct Operations {
     auto collate_sum(Expr df_other) {
         return Expr_Intersection(to_expr(), df_other.to_expr(), CollateAdaptor(std::plus<>()));
     }
+
+    template <typename Expr>
+    auto concatenate(Expr df_other) {
+        return Expr_Union(to_expr(), df_other.to_expr());
+    }
 };

@@ -383,7 +383,7 @@ TEST(Concat, Interleaved_No_Overlap_Finish_With_1) {
     auto df1 = DataFrame<int, float>({1, 4}, {10., 40.});
     auto df2 = DataFrame<int, float>({2, 3}, {20., 30.});
 
-    auto g = materialize(concatenate(df1, df2));
+    auto g = materialize(df1.concatenate(df2));
 
     EXPECT_EQ(g.size(), df1.size() + df2.size());
 
@@ -395,7 +395,7 @@ TEST(Concat, Interleaved_No_Overlap_Finish_With_2) {
     auto df1 = DataFrame<int, float>({1, 3}, {10., 30.});
     auto df2 = DataFrame<int, float>({2, 4}, {20., 40.});
 
-    auto g = materialize(concatenate(df1, df2));
+    auto g = materialize(df1.concatenate(df2));
 
     EXPECT_EQ(g.size(), df1.size() + df2.size());
 
@@ -407,7 +407,7 @@ TEST(Concat, Interleaved_No_Overlap_Start_With_2) {
     auto df1 = DataFrame<int, float>({2, 3}, {20., 30.});
     auto df2 = DataFrame<int, float>({1, 4}, {10., 40.});
 
-    auto g = materialize(concatenate(df1, df2));
+    auto g = materialize(df1.concatenate(df2));
 
     EXPECT_EQ(g.size(), df1.size() + df2.size());
 
@@ -419,7 +419,7 @@ TEST(Concat, Interleaved_With_Overlap) {
     auto df1 = DataFrame<int, float>({1, 2, 3}, {10., 20., 30.});
     auto df2 = DataFrame<int, float>({2, 4}, {21., 40.});
 
-    auto g = materialize(concatenate(df1, df2));
+    auto g = materialize(df1.concatenate(df2));
 
     EXPECT_EQ(g.size(), df1.size() + df2.size());
 
@@ -431,7 +431,7 @@ TEST(Concat, concate_and_sum) {
     auto df1 = DataFrame<int, float>({1, 2, 3}, {10., 20., 30.});
     auto df2 = DataFrame<int, float>({2, 4}, {21., 40.});
 
-    auto g = materialize(concatenate(df1, df2).reduce_sum());
+    auto g = materialize(df1.concatenate(df2).reduce_sum());
 
     EXPECT_EQ(g.size(), 4);
 
