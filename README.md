@@ -181,11 +181,7 @@ a: DataFrame<Tag, ValueA>
 b: DataFrame<Tag, ValueB>
 b: DataFrame<Tag, ValueC>
 
-c = Join::sum(a, b)
-
-or more generally,
-
-c = Join::sum(a, b, collate_op)
+c = a.collate(b, collate_op)
 ```
 
 Collate_op has signature
@@ -205,11 +201,8 @@ Example:
 auto df1 = DataFrame<int, float>{.tags={1, 2, 3}, .values={10., 20., 30.}};
 auto df2 = DataFrame<int, float>{.tags={1, 2, 3}, .values={-11., -22., -33.}};
 
-// g has tags 1,2,3 and values -1, -2, -3.
-auto g = Join::sum(df1, df2);
-
 // gp has tags 1,2,3 and values pair(10,-11), pair(20,-22), pair(30,-33).
-auto gp = Join::collate(df1, df2, [](float v1, float v2){ return std::pair(v1, v2); })
+auto gp = df1.collate(df2, [](float v1, float v2){ return std::pair(v1, v2); })
 ```
 
 ## Concatenating dataframes (outer join)
@@ -217,7 +210,7 @@ auto gp = Join::collate(df1, df2, [](float v1, float v2){ return std::pair(v1, v
 ```
 a: DataFrame<Tag, Value>
 b: DataFrame<Tag, Value>
-c = a[b] : DataFrame<Tag, Value>
+c = a.concatenate(b) : DataFrame<Tag, Value>
 ```
 
 Implemented using Expr_Union.
@@ -228,8 +221,8 @@ Example:
 auto df1 = DataFrame<int, float>({1, 2, 3}, {10., 20., 30.});
 auto df2 = DataFrame<int, float>({2, 4}, {21., 40.});
 
-// g has tags (1,2,2,3,4) and values (10, 20, 21, 30, 40).
-auto g = concatenate(df1, df2);
+// g has tags (1, 2, 2, 3, 4) and values (10, 20, 21, 30, 40).
+auto g = df1.concatenate(df2);
 ```
 
 ## Grouping (reduction)
@@ -240,11 +233,11 @@ The grouping operation is similar to groupby in SQL and traditional dataframes, 
 a: DataFrame<Tag, ValueA>
 g: DataFrame<Tag, ValueG>
 
-g = Reduce::sum(a)
+g = a.reduce_sum()
 
 or more generaly,
 
-g = Group::reduce(a, reduce_op)
+g = a.reduce(reduce_op)
 ```
 
 The first operation applies the reduction `sum` to all entries of `a` that have
@@ -257,7 +250,7 @@ tag.
 auto df = DataFrame<int, float>{.tags={1, 2, 2, 3}, .values={10., 20., 100., 30.}};
 
 // g has tags 1,2,3 and values 10, 120, 30.
-auto g = Group::sum(df);
+auto g = df.reduce_sum();
 ```
 
 # Example of row-wise dataframe storage
@@ -300,8 +293,9 @@ struct O3 : O1, O2
 };
 
 // g is a dataframe whose elements on of type O3.
-auto g = Join::collate(
-    df1, df2, [](const O1 &left, const O2 &right) { return O3(left, right); }
+auto g = df1.collate(
+    df2,
+    [](const O1 &left, const O2 &right) { return O3(left, right); }
 );
 
 assert(g.tags == df1.tags);
@@ -337,8 +331,7 @@ Here is a simple operation we can perform on this columnar data structure:
 ```
 // A float-valued dataframe that computes the ratio of teeth to toes for each
 // row of the columnar dataframe above.
-auto toes_per_tooth = Join::collate(
-    df.num_toes,
+auto toes_per_tooth = df.num_toes.collate(
     df.num_teeth,
     [](int a, int b) { return float(a) / b; }
 );
