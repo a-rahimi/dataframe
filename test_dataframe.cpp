@@ -119,7 +119,7 @@ TEST(Index, NoValues) {
 TEST(Reduce, sum) {
     auto df = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
 
-    auto g = materialize(Reduce::sum(df));
+    auto g = materialize(df.reduce_sum());
 
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
     EXPECT_EQ(*g.values, (std::vector<float>{10., 120., 30.}));
@@ -131,7 +131,7 @@ TEST(Reduce, max) {
         {10., 20., 100., 30.}
     };
 
-    auto g = materialize(Reduce::max(df));
+    auto g = materialize(df.reduce_max());
 
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
     EXPECT_EQ(*g.values, (std::vector<float>{10., 100., 30.}));
@@ -143,7 +143,7 @@ TEST(Reduce, count) {
         {10., 20., 100., 30.}
     };
 
-    auto g = materialize(Reduce::count(df));
+    auto g = materialize(df.reduce_count());
 
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
     EXPECT_EQ(*g.values, (std::vector<size_t>{1, 2, 1}));
@@ -152,8 +152,7 @@ TEST(Reduce, count) {
 TEST(Reduce, max_manual) {
     auto df = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
 
-    auto g = materialize(Reduce::reduce(
-        df, [](float a, float b) { return a > b ? a : b; }, [](float a) { return a; }));
+    auto g = materialize(df.reduce([](float a, float b) { return a > b ? a : b; }, [](float a) { return a; }));
 
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
     EXPECT_EQ(*g.values, (std::vector<float>{10., 100., 30.}));
@@ -162,7 +161,7 @@ TEST(Reduce, max_manual) {
 TEST(Reduce, moments) {
     auto df = DataFrame<int, float>({1, 2, 2, 3}, {10., 1., 2., 30.});
 
-    auto g = materialize(Reduce::moments(df));
+    auto g = materialize(df.reduce_moments());
 
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
     EXPECT_EQ(g[0].v.count, 1);
@@ -189,7 +188,7 @@ TEST(Reduce, moments) {
 TEST(Reduce, moments_apply) {
     auto df = DataFrame<int, float>({1, 2, 2, 3}, {20., 2., 4., 60.});
 
-    auto g = materialize(Reduce::moments(df.apply_to_values([](float v) { return v / 2; })));
+    auto g = materialize(df.apply_to_values([](float v) { return v / 2; }).reduce_moments());
 
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
     EXPECT_EQ(g[0].v.count, 1);
@@ -253,7 +252,7 @@ TEST(Join, Reduced) {
     auto df1 = DataFrame<int, float>({0, 0, 1}, {10., 20., 30.});
     auto df2 = DataFrame<int, float>({0, 1, 1}, {-11., -22., -33.});
 
-    auto g = materialize(Join::sum(Reduce::sum(df1), Reduce::sum(df2)));
+    auto g = materialize(Join::sum(df1.reduce_sum(), df2.reduce_sum()));
 
     EXPECT_EQ(g.size(), 2);
     EXPECT_EQ(*g.tags, (std::vector<int>{0, 1}));
@@ -264,7 +263,7 @@ TEST(Join, ReducedLeftDuplicates) {
     auto df1 = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
     auto df2 = DataFrame<int, float>({1, 2, 3}, {-11., -22., -33.});
 
-    auto g = materialize(Join::sum(Reduce::sum(df1), Reduce::sum(df2)));
+    auto g = materialize(Join::sum(df1.reduce_sum(), df2.reduce_sum()));
 
     EXPECT_EQ(g.size(), 3);
 
@@ -432,7 +431,7 @@ TEST(Concat, concate_and_sum) {
     auto df1 = DataFrame<int, float>({1, 2, 3}, {10., 20., 30.});
     auto df2 = DataFrame<int, float>({2, 4}, {21., 40.});
 
-    auto g = materialize(Reduce::sum(concatenate(df1, df2)));
+    auto g = materialize(concatenate(df1, df2).reduce_sum());
 
     EXPECT_EQ(g.size(), 4);
 

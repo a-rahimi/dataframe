@@ -222,17 +222,37 @@ struct Expr_Union : Operations<Expr_Union<Expr1, Expr2>> {
     void advance_to_tag(Tag t) { advance_to_tag_by_linear_search(*this, t); }
 };
 
+template <typename ReduceOp, typename InitOp>
+struct ReduceAdaptor {
+    ReduceOp op;
+    InitOp initop;
+
+    ReduceAdaptor(ReduceOp _op, InitOp _initop) : op(_op), initop(_initop) {}
+
+    template <typename Tag, typename Value>
+    auto operator()(Tag, Value v1) {
+        return initop(v1);
+    }
+
+    template <typename Tag, typename Value, typename ValueAccumulator>
+    auto operator()(Tag, Value v1, ValueAccumulator v2) {
+        return op(v1, v2);
+    }
+};
+
+template <typename Op>
+struct EmptyTagAdaptor {
+    Op op;
+    EmptyTagAdaptor(Op _op) : op(_op) {}
+    template <typename Tag, typename Value>
+    auto operator()(const Tag &t, const Value &v) {
+        return op(v);
+    }
+};
+
 template <typename Derived>
 struct Operations {
-    template <typename Op>
-    struct OpAdaptor {
-        Op op;
-        OpAdaptor(Op _op) : op(_op) {}
-        template <typename Tag, typename Value>
-        auto operator()(const Tag &t, const Value &v) {
-            return op(v);
-        }
-    };
+    auto to_expr() { return ::to_expr(static_cast<Derived &>(*this)); }
 
     template <typename Op>
     auto apply_to_tags_and_values(Op op) {
@@ -241,8 +261,42 @@ struct Operations {
 
     template <typename Op>
     auto apply_to_values(Op op) {
-        return Expr_Apply(to_expr(), OpAdaptor<Op>(op));
+        return Expr_Apply(to_expr(), EmptyTagAdaptor<Op>(op));
     }
 
-    auto to_expr() { return ::to_expr(static_cast<Derived &>(*this)); }
+    template <typename ReduceOp, typename ValueAccumulator>
+    auto reduce(ReduceOp op, ValueAccumulator init) {
+        return Expr_Reduction(to_expr(), ReduceAdaptor(op, init));
+    }
+
+    auto reduce_moments() {
+        struct Moments {
+            size_t count;
+            Derived::Value sum;
+            Derived::Value sum_squares;
+
+            auto mean() const { return sum / count; }
+            auto var() const { return sum_squares / count - mean() * mean(); }
+            auto std() const { return std::sqrt(var()); }
+
+            Moments operator()(Derived::Tag, Derived::Value v) { return Moments{1, v, v * v}; }
+
+            Moments operator()(Derived::Tag, Derived::Value v, const Moments &m) {
+                return Moments{m.count + 1, m.sum + v, m.sum_squares + v * v};
+            }
+        };
+
+        return Expr_Reduction(to_expr(), Moments());
+    }
+
+    auto reduce_count() {
+        return reduce([](const Derived::Value &, size_t acc) { return acc + 1; },
+                      [](const Derived::Value &) { return size_t(1); });
+    }
+
+    auto reduce_sum() { return reduce(std::plus<>(), std::identity()); }
+
+    auto reduce_max() {
+        return reduce([](Derived::Value v1, Derived::Value v2) { return v1 > v2 ? v1 : v2; }, std::identity());
+    }
 };
