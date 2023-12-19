@@ -77,7 +77,7 @@ TEST(Expr_DataFrame, materialize) {
     DataFrame<int, float> original_df({1, 2, 3, 4}, {10., 20., 30., 40.});
     auto edf = Expr_DataFrame(original_df);
 
-    auto df = materialize(edf);
+    auto df = edf.materialize();
 
     EXPECT_NE(df.tags, original_df.tags);
     EXPECT_NE(df.values, original_df.values);
@@ -96,7 +96,7 @@ TEST(Index, Simple) {
         {-20., -30.}
     };
 
-    auto g = materialize(df[i]);
+    auto g = df[i].materialize();
 
     EXPECT_EQ(g.size(), 2);
     EXPECT_EQ(*g.tags, (std::vector<int>{2, 3}));
@@ -108,7 +108,7 @@ TEST(Index, NoValues) {
 
     auto i = DataFrame<int, NoValue>({2, 3}, {});
 
-    auto g = materialize(df[i]);
+    auto g = df[i].materialize();
 
     EXPECT_EQ(g.size(), 2);
 
@@ -119,7 +119,7 @@ TEST(Index, NoValues) {
 TEST(Reduce, sum) {
     auto df = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
 
-    auto g = materialize(df.reduce_sum());
+    auto g = df.reduce_sum().materialize();
 
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
     EXPECT_EQ(*g.values, (std::vector<float>{10., 120., 30.}));
@@ -131,7 +131,7 @@ TEST(Reduce, max) {
         {10., 20., 100., 30.}
     };
 
-    auto g = materialize(df.reduce_max());
+    auto g = df.reduce_max().materialize();
 
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
     EXPECT_EQ(*g.values, (std::vector<float>{10., 100., 30.}));
@@ -143,7 +143,7 @@ TEST(Reduce, count) {
         {10., 20., 100., 30.}
     };
 
-    auto g = materialize(df.reduce_count());
+    auto g = df.reduce_count().materialize();
 
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
     EXPECT_EQ(*g.values, (std::vector<size_t>{1, 2, 1}));
@@ -152,7 +152,7 @@ TEST(Reduce, count) {
 TEST(Reduce, max_manual) {
     auto df = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
 
-    auto g = materialize(df.reduce([](float a, float b) { return a > b ? a : b; }, [](float a) { return a; }));
+    auto g = df.reduce([](float a, float b) { return a > b ? a : b; }, [](float a) { return a; }).materialize();
 
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
     EXPECT_EQ(*g.values, (std::vector<float>{10., 100., 30.}));
@@ -161,7 +161,7 @@ TEST(Reduce, max_manual) {
 TEST(Reduce, moments) {
     auto df = DataFrame<int, float>({1, 2, 2, 3}, {10., 1., 2., 30.});
 
-    auto g = materialize(df.reduce_moments());
+    auto g = df.reduce_moments().materialize();
 
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
     EXPECT_EQ(g[0].v.count, 1);
@@ -188,7 +188,7 @@ TEST(Reduce, moments) {
 TEST(Reduce, moments_apply) {
     auto df = DataFrame<int, float>({1, 2, 2, 3}, {20., 2., 4., 60.});
 
-    auto g = materialize(df.apply_to_values([](float v) { return v / 2; }).reduce_moments());
+    auto g = df.apply_to_values([](float v) { return v / 2; }).reduce_moments().materialize();
 
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
     EXPECT_EQ(g[0].v.count, 1);
@@ -207,7 +207,7 @@ TEST(Reduce, moments_apply) {
 TEST(Apply, divide_by_2) {
     auto df = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
 
-    auto g = materialize(df.apply_to_values([](float v) { return v / 2; }));
+    auto g = df.apply_to_values([](float v) { return v / 2; }).materialize();
 
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 2, 3}));
     EXPECT_EQ(*g.values, (std::vector<float>{5., 10., 50., 15.}));
@@ -218,7 +218,7 @@ TEST(Apply, find_tag) {
 
     auto expr = df.apply_to_values([](float v) { return v / 2; });
     expr.advance_to_tag(2);
-    auto g = materialize(expr);
+    auto g = expr.materialize();
 
     EXPECT_EQ(*g.tags, (std::vector<int>{2, 2, 3}));
     EXPECT_EQ(*g.values, (std::vector<float>{10., 50., 15.}));
@@ -229,7 +229,7 @@ TEST(Apply, find_tag_last) {
 
     auto expr = df.apply_to_values([](float v) { return v / 2; });
     expr.advance_to_tag(3);
-    auto g = materialize(expr);
+    auto g = expr.materialize();
 
     EXPECT_EQ(*g.tags, (std::vector<int>{3}));
     EXPECT_EQ(*g.values, (std::vector<float>{15.}));
@@ -239,7 +239,7 @@ TEST(Collate, SimplePair) {
     auto df1 = DataFrame<int, float>({1, 2, 3}, {10., 20., 30.});
     auto df2 = DataFrame<int, float>({1, 2, 3}, {-11., -22., -33.});
 
-    auto g = materialize(df1.collate(df2, [](float v1, float v2) { return std::pair(v1, v2); }));
+    auto g = df1.collate(df2, [](float v1, float v2) { return std::pair(v1, v2); }).materialize();
 
     EXPECT_EQ(g.size(), 3);
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
@@ -252,7 +252,7 @@ TEST(Collate, ReducedSum) {
     auto df1 = DataFrame<int, float>({0, 0, 1}, {10., 20., 30.});
     auto df2 = DataFrame<int, float>({0, 1, 1}, {-11., -22., -33.});
 
-    auto g = materialize(df1.reduce_sum().collate_sum(df2.reduce_sum()));
+    auto g = df1.reduce_sum().collate_sum(df2.reduce_sum()).materialize();
 
     EXPECT_EQ(g.size(), 2);
     EXPECT_EQ(*g.tags, (std::vector<int>{0, 1}));
@@ -263,7 +263,7 @@ TEST(Collate, ReducedLeftDuplicates) {
     auto df1 = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
     auto df2 = DataFrame<int, float>({1, 2, 3}, {-11., -22., -33.});
 
-    auto g = materialize(df1.reduce_sum().collate_sum(df2.reduce_sum()));
+    auto g = df1.reduce_sum().collate_sum(df2.reduce_sum()).materialize();
 
     EXPECT_EQ(g.size(), 3);
 
@@ -275,7 +275,7 @@ TEST(Collate, Strings) {
     auto df1 = DataFrame<std::string, float>({"ali", "john"}, {1., 2.});
     auto df2 = DataFrame<std::string, float>({"ali", "john"}, {10., 20.});
 
-    auto g = materialize(df1.collate_sum(df2));
+    auto g = df1.collate_sum(df2).materialize();
 
     EXPECT_EQ(*g.tags, *df1.tags);
     EXPECT_EQ(*g.values, std::vector<float>({11., 22.}));
@@ -315,7 +315,7 @@ TEST(Collate, Structs) {
         {O2{.num_teeth = 18}, O2{.num_teeth = 32}}
     };
 
-    auto g = materialize(df1.collate(df2, [](const O1 &left, const O2 &right) { return O3(left, right); }));
+    auto g = df1.collate(df2, [](const O1 &left, const O2 &right) { return O3(left, right); }).materialize();
 
     EXPECT_EQ(*g.tags, *df1.tags);
     EXPECT_EQ(g[0].v, O3(O1{"green", 6}, O2{18}));
@@ -335,8 +335,9 @@ TEST(Columnar, Simple) {
         {tags, {18, 32}         }
     };
 
-    auto toes_per_tooth = materialize(
-        df.num_toes.collate(df.num_teeth, [](int num_toes, int num_teeth) { return float(num_toes) / num_teeth; }));
+    auto toes_per_tooth =
+        df.num_toes.collate(df.num_teeth, [](int num_toes, int num_teeth) { return float(num_toes) / num_teeth; })
+            .materialize();
     EXPECT_EQ(toes_per_tooth.size(), 2);
     EXPECT_EQ(toes_per_tooth[0].v, 6.f / 18);
     EXPECT_EQ(toes_per_tooth[1].v, 10.f / 32);
@@ -373,7 +374,7 @@ TEST(RangeTags, advance_to_tag_Missing) {
 TEST(RangeTags, Indexing) {
     auto df = DataFrame<RangeTag, int>({-1, -2, -3, -4, -5});
     auto i = DataFrame<size_t, NoValue>({2, 3}, {});
-    auto c = materialize(df[i]);
+    auto c = *df[i];
 
     EXPECT_EQ(*c.tags, (std::vector<size_t>{2, 3}));
     EXPECT_EQ(*c.values, (std::vector<int>{-3, -4}));
@@ -383,7 +384,7 @@ TEST(Concat, Interleaved_No_Overlap_Finish_With_1) {
     auto df1 = DataFrame<int, float>({1, 4}, {10., 40.});
     auto df2 = DataFrame<int, float>({2, 3}, {20., 30.});
 
-    auto g = materialize(df1.concatenate(df2));
+    auto g = df1.concatenate(df2).materialize();
 
     EXPECT_EQ(g.size(), df1.size() + df2.size());
 
@@ -395,7 +396,7 @@ TEST(Concat, Interleaved_No_Overlap_Finish_With_2) {
     auto df1 = DataFrame<int, float>({1, 3}, {10., 30.});
     auto df2 = DataFrame<int, float>({2, 4}, {20., 40.});
 
-    auto g = materialize(df1.concatenate(df2));
+    auto g = df1.concatenate(df2).materialize();
 
     EXPECT_EQ(g.size(), df1.size() + df2.size());
 
@@ -407,7 +408,7 @@ TEST(Concat, Interleaved_No_Overlap_Start_With_2) {
     auto df1 = DataFrame<int, float>({2, 3}, {20., 30.});
     auto df2 = DataFrame<int, float>({1, 4}, {10., 40.});
 
-    auto g = materialize(df1.concatenate(df2));
+    auto g = df1.concatenate(df2).materialize();
 
     EXPECT_EQ(g.size(), df1.size() + df2.size());
 
@@ -419,7 +420,7 @@ TEST(Concat, Interleaved_With_Overlap) {
     auto df1 = DataFrame<int, float>({1, 2, 3}, {10., 20., 30.});
     auto df2 = DataFrame<int, float>({2, 4}, {21., 40.});
 
-    auto g = materialize(df1.concatenate(df2));
+    auto g = df1.concatenate(df2).materialize();
 
     EXPECT_EQ(g.size(), df1.size() + df2.size());
 
@@ -431,7 +432,19 @@ TEST(Concat, concate_and_sum) {
     auto df1 = DataFrame<int, float>({1, 2, 3}, {10., 20., 30.});
     auto df2 = DataFrame<int, float>({2, 4}, {21., 40.});
 
-    auto g = materialize(df1.concatenate(df2).reduce_sum());
+    auto g = df1.concatenate(df2).reduce_sum().materialize();
+
+    EXPECT_EQ(g.size(), 4);
+
+    EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3, 4}));
+    EXPECT_EQ(*g.values, (std::vector<float>{10., 41., 30., 40.}));
+}
+
+TEST(Materialize, splat) {
+    auto df1 = DataFrame<int, float>({1, 2, 3}, {10., 20., 30.});
+    auto df2 = DataFrame<int, float>({2, 4}, {21., 40.});
+
+    auto g = *df1.concatenate(df2).reduce_sum();
 
     EXPECT_EQ(g.size(), 4);
 

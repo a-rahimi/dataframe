@@ -1,3 +1,4 @@
+#include <chrono>
 #include <string>
 
 #include "dataframe.h"
@@ -57,24 +58,45 @@ void from_tab_separated_string(Task& t, const std::string_view& s) {
                                t.num_app_events);
 }
 
-int foo(int b) { return b; }
+struct Timer {
+    std::chrono::time_point<std::chrono::high_resolution_clock> t_start;
+    std::string context;
+
+    void start(const std::string& _context) {
+        context = _context;
+        t_start = std::chrono::high_resolution_clock::now();
+    }
+    void stop() {
+        auto t_stop = std::chrono::high_resolution_clock::now();
+        std::cout << context << ": " << std::chrono::duration_cast<std::chrono::milliseconds>(t_stop - t_start).count()
+                  << " ms.\n";
+    }
+};
 
 int main() {
+    Timer timer;
+
+    timer.start("Reading CSV");
     auto tasks = read_tsv<Task>("3816f181-7751-4146-ae5e-43a7afdd9a37-0.tsv");
+    timer.stop();
 
     std::cout << "read " << tasks.size() << " tasks" << std::endl;
     std::cout << "total size " << tasks.size() * sizeof(Task) / 1024 / 1024 << " MB.\n";
     std::cout << tasks[0].v;
 
+    timer.start("Retagging");
     auto tagged_tasks = retag(tasks, [](size_t, const Task& t) { return t.associate_id; });
+    timer.stop();
 
     std::cout << "First and last tasks after tagging with associate_id:\n";
     std::cout << tagged_tasks[0].v;
     std::cout << tagged_tasks[tagged_tasks.size() - 1].v;
 
-    auto task_NAET = tagged_tasks.apply_to_values([](const Task& t) { return t.net_associate_effort; });
-    auto NAET_moments = Reduce::moments(task_NAET);
-    auto NAET = materialize(NAET_moments.apply_to_values([](const auto& m) { return m.mean(); }));
+    timer.start("Computing stats");
+    auto NAET = *tagged_tasks.apply_to_values([](const Task& t) { return t.net_associate_effort; })
+                     .reduce_moments()
+                     .apply_to_values([](const auto& m) { return m.mean(); });
+    timer.stop();
 
-    std::cout << NAET;
+    //    std::cout << NAET;
 }

@@ -262,6 +262,23 @@ struct CollateAdaptor {
     }
 };
 
+template <typename Tag, typename Value>
+struct Moments {
+    size_t count;
+    Value sum;
+    Value sum_squares;
+
+    auto mean() const { return sum / count; }
+    auto var() const { return sum_squares / count - mean() * mean(); }
+    auto std() const { return std::sqrt(var()); }
+
+    Moments operator()(Tag, Value v) { return Moments{1, v, v * v}; }
+
+    Moments operator()(Tag, Value v, const Moments &m) {
+        return Moments{m.count + 1, m.sum + v, m.sum_squares + v * v};
+    }
+};
+
 template <typename Derived>
 struct Operations {
     auto to_expr() { return ::to_expr(static_cast<Derived &>(*this)); }
@@ -282,23 +299,7 @@ struct Operations {
     }
 
     auto reduce_moments() {
-        struct Moments {
-            size_t count;
-            Derived::Value sum;
-            Derived::Value sum_squares;
-
-            auto mean() const { return sum / count; }
-            auto var() const { return sum_squares / count - mean() * mean(); }
-            auto std() const { return std::sqrt(var()); }
-
-            Moments operator()(Derived::Tag, Derived::Value v) { return Moments{1, v, v * v}; }
-
-            Moments operator()(Derived::Tag, Derived::Value v, const Moments &m) {
-                return Moments{m.count + 1, m.sum + v, m.sum_squares + v * v};
-            }
-        };
-
-        return Expr_Reduction(to_expr(), Moments());
+        return Expr_Reduction(to_expr(), Moments<typename Derived::Tag, typename Derived::Value>());
     }
 
     auto reduce_count() {
@@ -326,4 +327,16 @@ struct Operations {
     auto concatenate(Expr df_other) {
         return Expr_Union(to_expr(), df_other.to_expr());
     }
+
+    auto materialize() {
+        auto edf = static_cast<Derived &>(*this);
+
+        DataFrame<typename Derived::Tag, typename Derived::Value> mdf;
+        for (; !edf.end(); edf.next()) {
+            mdf.tags->push_back(edf.tag);
+            mdf.values->push_back(edf.value);
+        }
+        return mdf;
+    }
+    auto operator*() { return materialize(); }
 };

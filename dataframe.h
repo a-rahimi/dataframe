@@ -60,16 +60,6 @@ struct DataFrame : Operations<DataFrame<_Tag, _Value>> {
     }
 };
 
-template <typename Expr>
-auto materialize(Expr edf) {
-    DataFrame<typename Expr::Tag, typename Expr::Value> mdf;
-    for (; !edf.end(); edf.next()) {
-        mdf.tags->push_back(edf.tag);
-        mdf.values->push_back(edf.value);
-    }
-    return mdf;
-}
-
 // A std::vector for sequential tags. Instead of storing the tag values,
 // computes them as needed.
 template <>
@@ -170,8 +160,3 @@ template <>
 struct std::vector<NoValue> {
     auto operator[](size_t i) const { return NoValue(); }
 };
-
-template <typename Expr1, typename Expr2>
-auto concatenate(Expr1 df1, Expr2 df2) {
-    return Expr_Union(to_expr(df1), to_expr(df2));
-}
