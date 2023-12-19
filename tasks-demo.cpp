@@ -72,9 +72,9 @@ int main() {
     std::cout << tagged_tasks[0].v;
     std::cout << tagged_tasks[tagged_tasks.size() - 1].v;
 
-    auto task_NAET = Apply::value(tagged_tasks, [](const Task& t) { return t.net_associate_effort; });
+    auto task_NAET = tagged_tasks.apply_to_values([](const Task& t) { return t.net_associate_effort; });
     auto NAET_moments = Reduce::moments(task_NAET);
-    auto NAET = materialize(Apply::value(NAET_moments, [](const auto& m) { return m.mean(); }));
+    auto NAET = materialize(NAET_moments.apply_to_values([](const auto& m) { return m.mean(); }));
 
     std::cout << NAET;
 }

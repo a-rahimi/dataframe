@@ -189,7 +189,7 @@ TEST(Reduce, moments) {
 TEST(Reduce, moments_apply) {
     auto df = DataFrame<int, float>({1, 2, 2, 3}, {20., 2., 4., 60.});
 
-    auto g = materialize(Reduce::moments(Apply::all(df, [](int t, float v) { return v / 2; })));
+    auto g = materialize(Reduce::moments(df.apply_to_values([](float v) { return v / 2; })));
 
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
     EXPECT_EQ(g[0].v.count, 1);
@@ -208,7 +208,7 @@ TEST(Reduce, moments_apply) {
 TEST(Apply, divide_by_2) {
     auto df = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
 
-    auto g = materialize(Apply::all(df, [](int tag, float v) { return v / 2; }));
+    auto g = materialize(df.apply_to_values([](float v) { return v / 2; }));
 
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 2, 3}));
     EXPECT_EQ(*g.values, (std::vector<float>{5., 10., 50., 15.}));
@@ -217,7 +217,7 @@ TEST(Apply, divide_by_2) {
 TEST(Apply, find_tag) {
     auto df = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
 
-    auto expr = Apply::all(df, [](int tag, float v) { return v / 2; });
+    auto expr = df.apply_to_values([](float v) { return v / 2; });
     expr.advance_to_tag(2);
     auto g = materialize(expr);
 
@@ -228,7 +228,7 @@ TEST(Apply, find_tag) {
 TEST(Apply, find_tag_last) {
     auto df = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
 
-    auto expr = Apply::all(df, [](int tag, float v) { return v / 2; });
+    auto expr = df.apply_to_values([](float v) { return v / 2; });
     expr.advance_to_tag(3);
     auto g = materialize(expr);
 

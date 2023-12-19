@@ -3,10 +3,12 @@
 // Forward declaration of a materialized dataframe.
 template <typename Tag, typename Value>
 struct DataFrame;
+template <typename Derived>
+struct Operations;
 
 // A wrapper for a materialized dataframe.
 template <typename _Tag, typename _Value>
-struct Expr_DataFrame {
+struct Expr_DataFrame : Operations<Expr_DataFrame<_Tag, _Value>> {
     using Tag = _Tag;
     using Value = _Value;
 
@@ -39,7 +41,7 @@ struct Expr_DataFrame {
 struct RangeTag;
 
 template <typename _Value>
-struct Expr_DataFrame<RangeTag, _Value> {
+struct Expr_DataFrame<RangeTag, _Value> : Operations<Expr_DataFrame<RangeTag, _Value>> {
     using Tag = size_t;
     using Value = _Value;
 
@@ -82,7 +84,7 @@ void advance_to_tag_by_linear_search(Expr &df, Tag t) {
 
 // Reduces entries of a dataframe that have the same tag.
 template <typename Expr, typename ReduceOp>
-struct Expr_Reduction {
+struct Expr_Reduction : Operations<Expr_Reduction<Expr, ReduceOp>> {
     Expr df;
     ReduceOp reduce_op;
 
@@ -114,7 +116,7 @@ struct Expr_Reduction {
 
 // Applies a function to every entry of a dataframe.
 template <typename Expr, typename Op>
-struct Expr_Apply {
+struct Expr_Apply : Operations<Expr_Apply<Expr, Op>> {
     Expr df;
     Op op;
 
@@ -146,7 +148,7 @@ struct Expr_Apply {
 
 // Inner join two dataframes.
 template <typename Expr1, typename Expr2, typename MergeOp>
-struct Expr_Intersection {
+struct Expr_Intersection : Operations<Expr_Intersection<Expr1, Expr2, MergeOp>> {
     Expr1 df1;
     Expr2 df2;
     MergeOp merge_op;
@@ -185,7 +187,7 @@ struct Expr_Intersection {
 
 // Outer join two dataframes.
 template <typename Expr1, typename Expr2>
-struct Expr_Union {
+struct Expr_Union : Operations<Expr_Union<Expr1, Expr2>> {
     Expr1 df1;
     Expr2 df2;
 
@@ -218,4 +220,29 @@ struct Expr_Union {
     bool end() const { return _end; }
 
     void advance_to_tag(Tag t) { advance_to_tag_by_linear_search(*this, t); }
+};
+
+template <typename Derived>
+struct Operations {
+    template <typename Op>
+    struct OpAdaptor {
+        Op op;
+        OpAdaptor(Op _op) : op(_op) {}
+        template <typename Tag, typename Value>
+        auto operator()(const Tag &t, const Value &v) {
+            return op(v);
+        }
+    };
+
+    template <typename Op>
+    auto apply_to_tags_and_values(Op op) {
+        return Expr_Apply(to_expr(), op);
+    }
+
+    template <typename Op>
+    auto apply_to_values(Op op) {
+        return Expr_Apply(to_expr(), OpAdaptor<Op>(op));
+    }
+
+    auto to_expr() { return ::to_expr(static_cast<Derived &>(*this)); }
 };

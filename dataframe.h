@@ -25,7 +25,7 @@ dataframe, or passing it by reference copies these arrays. Notably, modifying a
 copy of a dataframe modifies the tags and values of the original.
 */
 template <typename _Tag, typename _Value>
-struct DataFrame {
+struct DataFrame : Operations<DataFrame<_Tag, _Value>> {
     using Tag = _Tag;
     using Value = _Value;
 
@@ -234,31 +234,6 @@ static auto max(Expr df) {
 }
 
 };  // namespace Reduce
-
-namespace Apply {
-
-// TODO: This adaptor just throws away the first argument of op. Is there a way to
-// do this more simply with std::bind?
-template <typename Op>
-struct OpAdaptor {
-    Op op;
-    OpAdaptor(Op _op) : op(_op) {}
-    template <typename Tag, typename Value>
-    auto operator()(const Tag &t, const Value &v) {
-        return op(v);
-    }
-};
-
-template <typename Expr, typename Op>
-auto tag_and_value(Expr df, Op op) {
-    return Expr_Apply(to_expr(df), op);
-}
-
-template <typename Expr, typename Op>
-auto value(Expr df, Op op) {
-    return Expr_Apply(to_expr(df), OpAdaptor(op));
-}
-}  // namespace Apply
 
 namespace Join {
 template <typename CollateOp>
