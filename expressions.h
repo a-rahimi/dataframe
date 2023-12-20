@@ -338,5 +338,6 @@ struct Operations {
         }
         return mdf;
     }
+
     auto operator*() { return materialize(); }
 };

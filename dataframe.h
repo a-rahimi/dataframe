@@ -76,7 +76,7 @@ These require special handling because the indexing operation returns a
 different type of dataframe.
 */
 template <typename _Value>
-struct DataFrame<RangeTag, _Value> {
+struct DataFrame<RangeTag, _Value> : Operations<DataFrame<RangeTag, _Value>> {
     using Tag = size_t;
     using Value = _Value;
 
@@ -114,6 +114,20 @@ struct DataFrame<RangeTag, _Value> {
         return TagValueConst{i, (*values)[i]};
     }
 };
+static struct Timer {
+    std::chrono::time_point<std::chrono::high_resolution_clock> t_start;
+    std::string context;
+
+    void start(const std::string &_context) {
+        context = _context;
+        t_start = std::chrono::high_resolution_clock::now();
+    }
+    void stop() {
+        auto t_stop = std::chrono::high_resolution_clock::now();
+        std::cout << context << ": " << std::chrono::duration_cast<std::chrono::milliseconds>(t_stop - t_start).count()
+                  << " ms.\n";
+    }
+} timer;
 
 template <typename Tag, typename Value>
 auto sort_tags(DataFrame<Tag, Value> df) {
@@ -124,10 +138,14 @@ auto sort_tags(DataFrame<Tag, Value> df) {
     // Sort the sequence but use the dataframe's tags to compare.
     const auto &tags = *df.tags;
     const auto &values = *df.values;
+    timer.start("Sort");
     std::sort(indices, indices + df.size(), [tags](size_t a, size_t b) { return tags[a] < tags[b]; });
+    timer.stop();
 
     // Create a new dataframe from scratch with the entries reordered.
     DataFrame<Tag, Value> dfnew;
+
+    timer.start("Reorder");
     dfnew.tags->reserve(df.size());
     dfnew.values->reserve(df.size());
 
@@ -135,6 +153,7 @@ auto sort_tags(DataFrame<Tag, Value> df) {
         dfnew.tags->push_back(tags[indices[i]]);
         dfnew.values->push_back(values[indices[i]]);
     }
+    timer.stop();
     return dfnew;
 }
 
@@ -148,8 +167,10 @@ auto retag(DataFrame<Tag, Value> df, TagOp compute_tag) {
     dfo.values = df.values;
 
     // create a new tags array from scratch with the computed tags.
+    timer.start("Compute new tags");
     for (size_t i = 0; i < df.size(); ++i)
         dfo.tags->push_back(compute_tag((*df.tags)[i], (*df.values)[i]));
+    timer.stop();
 
     return sort_tags(dfo);
 }
