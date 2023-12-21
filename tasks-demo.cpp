@@ -54,6 +54,7 @@ int main() {
     Timer timer;
 
     timer.start("Reading tab-separated file");
+    // A materialized dataframe that contains 850k rows.
     auto tasks = read_tsv<Task>("3816f181-7751-4146-ae5e-43a7afdd9a37-0.tsv");
     timer.stop();
 
@@ -62,13 +63,15 @@ int main() {
     std::cout << tasks[0].v;
 
     timer.start("retag expression");
+    // An expression (a non-materialized dataframe) where each row is tagged with the associate_id
+    // field of the corresponding record.
     auto tasks_retagged = tasks.retag([](size_t, const Task& t) { return t.associate_id; });
     timer.stop();
 
     timer.start("Computing stats");
-    auto NAET = *tasks_retagged.apply_to_values([](const Task& t) { return t.net_associate_effort; })
-                     .reduce_moments()
-                     .apply_to_values([](const auto& m) { return m.mean(); });
+    // For each unit associate, compute the average value of the net_associate_effort field,
+    // and store the result in a materialized dataframe (the * operator materializes and expression).
+    auto NAET = *tasks_retagged.apply_to_values([](const Task& t) { return t.net_associate_effort; }).mean();
     timer.stop();
 
     //    std::cout << NAET;

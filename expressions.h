@@ -375,6 +375,10 @@ struct Operations {
         return Expr_Reduction(to_expr(), Moments<typename Derived::Tag, typename Derived::Value>());
     }
 
+    auto mean() {
+        return reduce_moments().apply_to_values([](const auto &m) { return m.mean(); });
+    }
+
     auto reduce_count() {
         return reduce([](const Derived::Value &, size_t acc) { return acc + 1; },
                       [](const Derived::Value &) { return size_t(1); });
