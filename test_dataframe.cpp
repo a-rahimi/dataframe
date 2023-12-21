@@ -451,3 +451,12 @@ TEST(Materialize, splat) {
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3, 4}));
     EXPECT_EQ(*g.values, (std::vector<float>{10., 41., 30., 40.}));
 }
+
+TEST(Retag, floats) {
+    auto df = DataFrame<int, float>({1, 2, 3}, {10., 20., 30.});
+    auto g = *df.retag([](int t, float v) { return -v; });
+
+    EXPECT_EQ(g.size(), 3);
+    EXPECT_EQ(*g.tags, (std::vector<float>{-30., -20., -10.}));
+    EXPECT_EQ(*g.values, (std::vector<float>{30., 20., 10.}));
+}

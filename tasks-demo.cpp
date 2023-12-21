@@ -4,14 +4,6 @@
 #include "dataframe.h"
 
 struct Task {
-    /*
-   task_id	inquiry_id	created_time_pt	associate_id	store_id	store_format	opportunities
-duration_of_task_seconds	ttff	buffer_time	net_associate_effort	task_latency_s	task_queue	quorum_size
-num_defects	num_app_events
-
-e09f4129-f5e1-4705-b0f5-2b051e5dee90	bd3aaf7b-4067-37fb-b207-363cd00afc17	2023-08-01 00:00:05.99	rhmnkd
-GB-ENG-222	JADOO	2	11.728999999999999	13.0810	5.8220	129.6400	148.5430	DEFAULT	1	-1	113
-    */
     std::string task_id;
     std::string inquiry_id;
     std::string created_time_pt;
@@ -61,7 +53,7 @@ void from_tab_separated_string(Task& t, const std::string_view& s) {
 int main() {
     Timer timer;
 
-    timer.start("Reading CSV");
+    timer.start("Reading tab-separated file");
     auto tasks = read_tsv<Task>("3816f181-7751-4146-ae5e-43a7afdd9a37-0.tsv");
     timer.stop();
 
@@ -69,16 +61,12 @@ int main() {
     std::cout << "total size " << tasks.size() * sizeof(Task) / 1024 / 1024 << " MB.\n";
     std::cout << tasks[0].v;
 
-    timer.start("Retagging");
-    auto tagged_tasks = retag(tasks, [](size_t, const Task& t) { return t.associate_id; });
+    timer.start("retag expression");
+    auto tasks_retagged = tasks.retag([](size_t, const Task& t) { return t.associate_id; });
     timer.stop();
 
-    std::cout << "First and last tasks after tagging with associate_id:\n";
-    std::cout << tagged_tasks[0].v;
-    std::cout << tagged_tasks[tagged_tasks.size() - 1].v;
-
     timer.start("Computing stats");
-    auto NAET = *tagged_tasks.apply_to_values([](const Task& t) { return t.net_associate_effort; })
+    auto NAET = *tasks_retagged.apply_to_values([](const Task& t) { return t.net_associate_effort; })
                      .reduce_moments()
                      .apply_to_values([](const auto& m) { return m.mean(); });
     timer.stop();

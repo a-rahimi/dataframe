@@ -54,6 +54,9 @@ struct Expr_DataFrame<RangeTag, _Value> : Operations<Expr_DataFrame<RangeTag, _V
 
     void update_tagvalue(size_t _i) {
         i = _i;
+        if (_i >= df.size())
+            return;
+
         tag = _i;
         value = (*df.values)[_i];
     }
@@ -81,6 +84,54 @@ void advance_to_tag_by_linear_search(Expr &df, Tag t) {
     while (!df.end() && (df.tag != t))
         df.next();
 }
+
+// Compute new tags on a materialized dataframe.
+template <typename TagI, typename _Value, typename RetagOp>
+struct Expr_Retag : Operations<Expr_Retag<TagI, _Value, RetagOp>> {
+    DataFrame<TagI, _Value> df;
+    RetagOp retag_op;
+
+    using Tag = decltype(retag_op(df[0].t, df[1].v));
+    using Value = _Value;
+
+    Tag tag;
+    Value value;
+    size_t i;
+    std::shared_ptr<std::vector<size_t>> traversal_order;
+    std::shared_ptr<std::vector<Tag>> tags;
+
+    Expr_Retag(DataFrame<TagI, Value> _df, RetagOp retag_op)
+        : df(_df), traversal_order(new std::vector<size_t>(df.size())), tags(new std::vector<Tag>(df.size())) {
+        // compute the ordering.
+
+        auto &tags = *this->tags;
+
+        for (size_t i = 0; i < df.size(); ++i)
+            tags[i] = retag_op((*df.tags)[i], (*df.values)[i]);
+
+        std::iota(traversal_order->begin(), traversal_order->end(), 0);
+        std::sort(
+            traversal_order->begin(), traversal_order->end(), [tags](size_t a, size_t b) { return tags[a] < tags[b]; });
+
+        update_tagvalue(0);
+    }
+
+    void update_tagvalue(size_t _i) {
+        i = _i;
+        if (_i >= df.size())
+            return;
+        tag = (*tags)[(*traversal_order)[_i]];
+        value = (*df.values)[(*traversal_order)[_i]];
+    }
+
+    void next() { update_tagvalue(i + 1); }
+
+    bool end() const { return i >= df.size(); }
+
+    // TODO: There's a faster way to advance to a tag. We just need to advance to the
+    // tag in df and map to the index of that tag.
+    void advance_to_tag(Tag t) { advance_to_tag_by_linear_search(*this, t); }
+};
 
 // Reduces entries of a dataframe that have the same tag.
 template <typename Expr, typename ReduceOp>
@@ -283,14 +334,19 @@ template <typename Derived>
 struct Operations {
     auto to_expr() { return ::to_expr(static_cast<Derived &>(*this)); }
 
-    template <typename Op>
-    auto apply_to_tags_and_values(Op op) {
+    template <typename RetagOp>
+    auto retag(RetagOp compute_tag) {
+        return Expr_Retag(static_cast<Derived &>(*this), compute_tag);
+    }
+
+    template <typename ApplyOp>
+    auto apply_to_tags_and_values(ApplyOp op) {
         return Expr_Apply(to_expr(), op);
     }
 
-    template <typename Op>
-    auto apply_to_values(Op op) {
-        return Expr_Apply(to_expr(), EmptyTagAdaptor<Op>(op));
+    template <typename ApplyOp>
+    auto apply_to_values(ApplyOp op) {
+        return Expr_Apply(to_expr(), EmptyTagAdaptor<ApplyOp>(op));
     }
 
     template <typename ReduceOp, typename ValueAccumulator>
@@ -329,12 +385,12 @@ struct Operations {
     }
 
     auto materialize() {
-        auto edf = static_cast<Derived &>(*this);
+        auto expr = static_cast<Derived &>(*this);
 
         DataFrame<typename Derived::Tag, typename Derived::Value> mdf;
-        for (; !edf.end(); edf.next()) {
-            mdf.tags->push_back(edf.tag);
-            mdf.values->push_back(edf.value);
+        for (; !expr.end(); expr.next()) {
+            mdf.tags->push_back(expr.tag);
+            mdf.values->push_back(expr.value);
         }
         return mdf;
     }
