@@ -1,10 +1,29 @@
-#include <algorithm>
+#include <type_traits>
 
 // Forward declaration of a materialized dataframe.
 template <typename Tag, typename Value>
 struct DataFrame;
 template <typename Derived>
 struct Operations;
+
+/* A version of std::reference_wrapper that's equipped with a default constructor.
+ */
+template <typename T>
+struct reference {
+    T *ptr;
+
+    reference() : ptr(0) {}
+    reference &operator=(T &&v) {
+        ptr = &v;
+        return *this;
+    }
+    reference &operator=(T &v) {
+        ptr = &v;
+        return *this;
+    }
+    operator T &() const { return *ptr; }
+    bool operator==(reference<T> other) { return *ptr == *other.ptr; }
+};
 
 // A wrapper for a materialized dataframe.
 template <typename _Tag, typename _Value>
@@ -14,8 +33,8 @@ struct Expr_DataFrame : Operations<Expr_DataFrame<_Tag, _Value>> {
 
     DataFrame<Tag, Value> df;
     size_t i;
-    Tag tag;
-    Value value;
+    reference<Tag> tag;
+    reference<Value> value;
 
     Expr_DataFrame(DataFrame<Tag, Value> _df) : df(_df), i(0) { update_tagvalue(); }
 
@@ -37,9 +56,9 @@ struct Expr_DataFrame : Operations<Expr_DataFrame<_Tag, _Value>> {
     }
 };
 
-// A wrapper for a materialized RangeTag dataframe.
 struct RangeTag;
 
+// A wrapper for a materialized RangeTag dataframe.
 template <typename _Value>
 struct Expr_DataFrame<RangeTag, _Value> : Operations<Expr_DataFrame<RangeTag, _Value>> {
     using Tag = size_t;
@@ -48,7 +67,7 @@ struct Expr_DataFrame<RangeTag, _Value> : Operations<Expr_DataFrame<RangeTag, _V
     DataFrame<RangeTag, Value> df;
     size_t i;
     Tag tag;
-    Value value;
+    reference<Value> value;
 
     Expr_DataFrame(DataFrame<RangeTag, Value> _df) : df(_df) { update_tagvalue(0); }
 
@@ -89,13 +108,12 @@ void advance_to_tag_by_linear_search(Expr &df, Tag t) {
 template <typename TagI, typename _Value, typename RetagOp>
 struct Expr_Retag : Operations<Expr_Retag<TagI, _Value, RetagOp>> {
     DataFrame<TagI, _Value> df;
-    RetagOp retag_op;
 
-    using Tag = decltype(retag_op(df[0].t, df[1].v));
+    using Tag = std::invoke_result_t<RetagOp, typename DataFrame<TagI, _Value>::Tag, _Value>;
     using Value = _Value;
 
-    Tag tag;
-    Value value;
+    reference<Tag> tag;
+    reference<Value> value;
     size_t i;
     std::shared_ptr<std::vector<size_t>> traversal_order;
     std::shared_ptr<std::vector<Tag>> tags;
@@ -103,7 +121,6 @@ struct Expr_Retag : Operations<Expr_Retag<TagI, _Value, RetagOp>> {
     Expr_Retag(DataFrame<TagI, Value> _df, RetagOp retag_op)
         : df(_df), traversal_order(new std::vector<size_t>(df.size())), tags(new std::vector<Tag>(df.size())) {
         // compute the ordering.
-
         auto &tags = *this->tags;
 
         for (size_t i = 0; i < df.size(); ++i)
@@ -140,9 +157,9 @@ struct Expr_Reduction : Operations<Expr_Reduction<Expr, ReduceOp>> {
     ReduceOp reduce_op;
 
     using Tag = typename Expr::Tag;
-    using Value = decltype(reduce_op(df.tag, df.value));
+    using Value = std::invoke_result_t<ReduceOp, typename Expr::Tag, typename Expr::Value>;
 
-    Tag tag;
+    reference<Tag> tag;
     Value value;
     bool _end;
 
@@ -172,9 +189,9 @@ struct Expr_Apply : Operations<Expr_Apply<Expr, Op>> {
     Op op;
 
     using Tag = typename Expr::Tag;
-    using Value = decltype(op(df.tag, df.value));
+    using Value = std::invoke_result_t<Op, typename Expr::Tag, typename Expr::Value>;
 
-    Tag tag;
+    reference<Tag> tag;
     Value value;
     bool _end;
 
@@ -204,8 +221,8 @@ struct Expr_Intersection : Operations<Expr_Intersection<Expr1, Expr2, MergeOp>> 
     Expr2 df2;
     MergeOp merge_op;
 
-    using Tag = decltype(merge_op(df1.tag, df2.tag, df1.value, df2.value).first);
-    using Value = decltype(merge_op(df1.tag, df2.tag, df1.value, df2.value).second);
+    using Tag = typename Expr2::Tag;
+    using Value = std::invoke_result_t<MergeOp, Tag, typename Expr1::Value, typename Expr2::Value>;
 
     Tag tag;
     Value value;
@@ -223,9 +240,9 @@ struct Expr_Intersection : Operations<Expr_Intersection<Expr1, Expr2, MergeOp>> 
             if (df1.end())
                 continue;
 
-            auto tagvalue = merge_op(df1.tag, df2.tag, df1.value, df2.value);
-            tag = tagvalue.first;
-            value = tagvalue.second;
+            tag = df2.tag;
+            value = merge_op(df1.tag, df1.value, df2.value);
+
             df2.next();
             break;
         }
@@ -245,8 +262,8 @@ struct Expr_Union : Operations<Expr_Union<Expr1, Expr2>> {
     using Tag = Expr1::Tag;
     using Value = Expr1::Value;
 
-    Tag tag;
-    Value value;
+    reference<Tag> tag;
+    reference<Value> value;
     bool _end;
 
     Expr_Union(Expr1 _df1, Expr2 _df2) : df1(_df1), df2(_df2), _end(false) { next(); }
@@ -302,14 +319,14 @@ struct EmptyTagAdaptor {
 };
 
 template <typename CollateOp>
-struct CollateAdaptor {
+struct WithTagPlaceholder {
     CollateOp op;
 
-    CollateAdaptor(CollateOp _op) : op(_op) {}
+    WithTagPlaceholder(CollateOp _op) : op(_op) {}
 
-    template <typename Tag1, typename Tag2, typename Value1, typename Value2>
-    auto operator()(Tag1 t1, Tag2, Value1 v1, Value2 v2) {
-        return std::pair(t1, op(v1, v2));
+    template <typename Tag, typename Value1, typename Value2>
+    auto operator()(Tag, Value1 v1, Value2 v2) {
+        return op(v1, v2);
     }
 };
 
@@ -371,12 +388,12 @@ struct Operations {
 
     template <typename Expr, typename CollateOp>
     auto collate(Expr df_other, CollateOp op) {
-        return Expr_Intersection(to_expr(), df_other.to_expr(), CollateAdaptor(op));
+        return Expr_Intersection(to_expr(), df_other.to_expr(), WithTagPlaceholder(op));
     }
 
     template <typename Expr>
     auto collate_sum(Expr df_other) {
-        return Expr_Intersection(to_expr(), df_other.to_expr(), CollateAdaptor(std::plus<>()));
+        return Expr_Intersection(to_expr(), df_other.to_expr(), WithTagPlaceholder(std::plus<>()));
     }
 
     template <typename Expr>

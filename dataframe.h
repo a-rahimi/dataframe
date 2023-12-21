@@ -40,8 +40,7 @@ struct DataFrame : Operations<DataFrame<_Tag, _Value>> {
 
     template <typename ValueOther>
     auto operator[](const DataFrame<Tag, ValueOther> &index) {
-        return Expr_Intersection(
-            to_expr(*this), to_expr(index), [](Tag tag, Tag, Value v, ValueOther) { return std::pair(tag, v); });
+        return Expr_Intersection(to_expr(*this), to_expr(index), [](Tag, Value v, ValueOther) { return v; });
     }
 
     auto operator[](size_t i) {
@@ -95,8 +94,7 @@ struct DataFrame<RangeTag, _Value> : Operations<DataFrame<RangeTag, _Value>> {
 
     template <typename ValueOther>
     auto operator[](const DataFrame<size_t, ValueOther> &index) {
-        return Expr_Intersection(
-            to_expr(*this), to_expr(index), [](size_t tag, size_t, Value v, ValueOther) { return std::pair(tag, v); });
+        return Expr_Intersection(to_expr(*this), to_expr(index), [](size_t, Value v, ValueOther) { return v; });
     }
 
     auto operator[](size_t i) {
