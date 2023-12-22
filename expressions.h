@@ -105,28 +105,27 @@ void advance_to_tag_by_linear_search(Expr &df, Tag t) {
 }
 
 // Compute new tags on a materialized dataframe.
-template <typename TagI, typename _Value, typename RetagOp>
-struct Expr_Retag : Operations<Expr_Retag<TagI, _Value, RetagOp>> {
-    DataFrame<TagI, _Value> df;
+template <typename Tag1, typename Value1, typename Tag2, typename Value2>
+struct Expr_Retag : Operations<Expr_Retag<Tag1, Value1, Tag2, Value2>> {
+    DataFrame<Tag1, Value1> df_tags;
+    DataFrame<Tag2, Value2> df_values;
 
-    using Tag = std::invoke_result_t<RetagOp, typename DataFrame<TagI, _Value>::Tag, _Value>;
-    using Value = _Value;
+    using Tag = Value1;
+    using Value = Value2;
 
     reference<Tag> tag;
     reference<Value> value;
     size_t i;
     std::shared_ptr<std::vector<size_t>> traversal_order;
-    std::shared_ptr<std::vector<Tag>> tags;
 
-    Expr_Retag(DataFrame<TagI, Value> _df, RetagOp retag_op)
-        : df(_df), traversal_order(new std::vector<size_t>(df.size())), tags(new std::vector<Tag>(df.size())) {
+    Expr_Retag(DataFrame<Tag1, Tag> _df_tags, DataFrame<Tag2, Value> _df_values)
+        : df_tags(_df_tags), df_values(_df_values), traversal_order(new std::vector<size_t>(_df_values.size())) {
+        if (df_tags.size() != df_values.size())
+            throw std::invalid_argument("df_tags and df_values must have the same length");
+
         // compute the ordering.
-        auto &tags = *this->tags;
-
-        for (size_t i = 0; i < df.size(); ++i)
-            tags[i] = retag_op((*df.tags)[i], (*df.values)[i]);
-
         std::iota(traversal_order->begin(), traversal_order->end(), 0);
+        const auto &tags = *df_tags.values;
         std::sort(
             traversal_order->begin(), traversal_order->end(), [tags](size_t a, size_t b) { return tags[a] < tags[b]; });
 
@@ -135,15 +134,15 @@ struct Expr_Retag : Operations<Expr_Retag<TagI, _Value, RetagOp>> {
 
     void update_tagvalue(size_t _i) {
         i = _i;
-        if (_i >= df.size())
+        if (_i >= df_values.size())
             return;
-        tag = (*tags)[(*traversal_order)[_i]];
-        value = (*df.values)[(*traversal_order)[_i]];
+        tag = (*df_tags.values)[(*traversal_order)[_i]];
+        value = (*df_values.values)[(*traversal_order)[_i]];
     }
 
     void next() { update_tagvalue(i + 1); }
 
-    bool end() const { return i >= df.size(); }
+    bool end() const { return i >= df_values.size(); }
 
     // TODO: There's a faster way to advance to a tag. We just need to advance to the
     // tag in df and map to the index of that tag.
@@ -353,7 +352,9 @@ struct Operations {
 
     template <typename RetagOp>
     auto retag(RetagOp compute_tag) {
-        return Expr_Retag(static_cast<Derived &>(*this), compute_tag);
+        auto df = static_cast<Derived &>(*this);
+        auto df_tags = df.apply_to_tags_and_values(compute_tag).materialize();
+        return Expr_Retag(df_tags, df);
     }
 
     template <typename ApplyOp>

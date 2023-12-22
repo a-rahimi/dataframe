@@ -112,6 +112,7 @@ struct DataFrame<RangeTag, _Value> : Operations<DataFrame<RangeTag, _Value>> {
         return TagValueConst{i, (*values)[i]};
     }
 };
+
 static struct Timer {
     std::chrono::time_point<std::chrono::high_resolution_clock> t_start;
     std::string context;

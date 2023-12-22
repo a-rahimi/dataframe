@@ -213,6 +213,15 @@ TEST(Apply, divide_by_2) {
     EXPECT_EQ(*g.values, (std::vector<float>{5., 10., 50., 15.}));
 }
 
+TEST(Apply, output_types) {
+    auto df = DataFrame<std::string, float>({"hi", "ho", "hello"}, {10., 20., 30.});
+
+    auto g = df.apply_to_tags_and_values([](const std::string &t, float v) { return v / 2; }).materialize();
+
+    EXPECT_EQ(*g.tags, *df.tags);
+    EXPECT_EQ(*g.values, (std::vector<float>{5., 10., 15.}));
+}
+
 TEST(Apply, find_tag) {
     auto df = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
 
@@ -453,8 +462,8 @@ TEST(Materialize, splat) {
 }
 
 TEST(Retag, floats) {
-    auto df = DataFrame<int, float>({1, 2, 3}, {10., 20., 30.});
-    auto g = *df.retag([](int t, float v) { return -v; });
+    auto df = DataFrame<std::string, float>({"hi", "ho", "hello"}, {20., 10., 30.});
+    auto g = *df.retag([](const std::string &t, float v) { return -v; });
 
     EXPECT_EQ(g.size(), 3);
     EXPECT_EQ(*g.tags, (std::vector<float>{-30., -20., -10.}));
