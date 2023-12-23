@@ -347,7 +347,7 @@ struct Operations {
     template <std::invocable<typename Derived::Tag, typename Derived::Value> RetagOp>
     auto retag(RetagOp compute_tag) {
         auto df = static_cast<Derived &>(*this);
-        auto df_tags = df.apply_to_tags_and_values(compute_tag).materialize();
+        auto df_tags = df.apply(compute_tag).materialize();
         return Expr_Retag(df_tags, df);
     }
 
@@ -358,12 +358,12 @@ struct Operations {
     }
 
     template <std::invocable<typename Derived::Tag, typename Derived::Value> ApplyOp>
-    auto apply_to_tags_and_values(ApplyOp op) {
+    auto apply(ApplyOp op) {
         return Expr_Apply(to_expr(), op);
     }
 
     template <std::invocable<typename Derived::Value> ApplyOp>
-    auto apply_to_values(ApplyOp op) {
+    auto apply(ApplyOp op) {
         return Expr_Apply(to_expr(), [&op](typename Derived::Tag, const typename Derived::Value &v) { return op(v); });
     }
 
@@ -377,15 +377,15 @@ struct Operations {
     }
 
     auto reduce_mean() {
-        return reduce_moments().apply_to_values([](const auto &m) { return m.mean(); });
+        return reduce_moments().apply([](const auto &m) { return m.mean(); });
     }
 
     auto reduce_var() {
-        return reduce_moments().apply_to_values([](const auto &m) { return m.var(); });
+        return reduce_moments().apply([](const auto &m) { return m.var(); });
     }
 
     auto reduce_std() {
-        return reduce_moments().apply_to_values([](const auto &m) { return m.std(); });
+        return reduce_moments().apply([](const auto &m) { return m.std(); });
     }
 
     auto reduce_count() {

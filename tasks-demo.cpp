@@ -293,13 +293,13 @@ int main() {
         timer.start("By sorting expr: retag expression");
         // An expression (a non-materialized dataframe) where each row is tagged with the associate_id
         // field of the corresponding record.
-        auto tasks_retagged = tasks.retag(tasks.apply_to_values([](const Task& t) { return t.associate_id; }));
+        auto tasks_retagged = tasks.retag(tasks.apply([](const Task& t) { return t.associate_id; }));
         timer.stop();
 
         timer.start("By sorting expr: Computing stats");
         // For each unit associate, compute the average value of the net_associate_effort field,
         // and store the result in a materialized dataframe (the * operator materializes and expression).
-        auto NAET = *tasks_retagged.apply_to_values([](const Task& t) { return t.net_associate_effort; }).reduce_mean();
+        auto NAET = *tasks_retagged.apply([](const Task& t) { return t.net_associate_effort; }).reduce_mean();
         timer.stop();
     }
     timer.stop();
