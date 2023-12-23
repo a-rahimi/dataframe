@@ -469,3 +469,21 @@ TEST(Retag, floats) {
     EXPECT_EQ(*g.tags, (std::vector<float>{-30., -20., -10.}));
     EXPECT_EQ(*g.values, (std::vector<float>{30., 20., 10.}));
 }
+
+TEST(Retag, floats_with_repeats) {
+    auto df = DataFrame<std::string, float>({"hi", "ho", "ho", "hello"}, {20., 20., 10., 30.});
+    auto g = *df.retag([](const std::string &t, float v) { return -v; });
+
+    EXPECT_EQ(g.size(), 4);
+    EXPECT_EQ(*g.tags, (std::vector<float>{-30., -20., -20., -10.}));
+    EXPECT_EQ(*g.values, (std::vector<float>{30., 20., 20., 10.}));
+}
+
+TEST(Retag, floats_with_repeats_2) {
+    auto df = DataFrame<std::string, float>({"hi", "ho", "ho", "hello"}, {20., 10., 10., 30.});
+    auto g = *df.retag([](const std::string &t, float v) { return -v; });
+
+    EXPECT_EQ(g.size(), 4);
+    EXPECT_EQ(*g.tags, (std::vector<float>{-30., -20., -10., -10.}));
+    EXPECT_EQ(*g.values, (std::vector<float>{30., 20., 10., 10.}));
+}

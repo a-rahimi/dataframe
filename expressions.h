@@ -1,3 +1,4 @@
+#include <map>
 #include <type_traits>
 
 // Forward declaration of a materialized dataframe.
@@ -119,16 +120,20 @@ struct Expr_Retag : Operations<Expr_Retag<Tag1, Value1, Tag2, Value2>> {
     std::shared_ptr<std::vector<size_t>> traversal_order;
 
     Expr_Retag(DataFrame<Tag1, Tag> _df_tags, DataFrame<Tag2, Value> _df_values)
-        : df_tags(_df_tags), df_values(_df_values), traversal_order(new std::vector<size_t>(_df_values.size())) {
+        : df_tags(_df_tags), df_values(_df_values), traversal_order(new std::vector<size_t>) {
         if (df_tags.size() != df_values.size())
             throw std::invalid_argument("df_tags and df_values must have the same length");
 
-        // compute the ordering.
-        std::iota(traversal_order->begin(), traversal_order->end(), 0);
-        const auto &tags = *df_tags.values;
-        std::sort(
-            traversal_order->begin(), traversal_order->end(), [tags](size_t a, size_t b) { return tags[a] < tags[b]; });
+        // Compute the ordering by pushing every tag into a map that translates
+        // a tag to the index of df_tags where the tag came from.
+        std::map<Value1, std::vector<size_t>> traversal_order_map;
+        for (size_t i = 0; i < df_tags.size(); ++i)
+            traversal_order_map[(*df_tags.values)[i]].push_back(i);
 
+        // Read the map back in sorted order and store the indices.
+        for (const auto &[tag, indices] : traversal_order_map)
+            for (size_t i : indices)
+                traversal_order->push_back(i);
         update_tagvalue(0);
     }
 

@@ -6,8 +6,13 @@
 #include <utility>
 #include <vector>
 
+// Ask clang-format to not sort the order of these. Their order is important
+// because some of these depend on each other.
+// clang-format off
+#include "timer.h"
 #include "expressions.h"
 #include "formatting.h"
+// clang-format on
 
 struct RangeTag {};
 
@@ -112,21 +117,6 @@ struct DataFrame<RangeTag, _Value> : Operations<DataFrame<RangeTag, _Value>> {
         return TagValueConst{i, (*values)[i]};
     }
 };
-
-static struct Timer {
-    std::chrono::time_point<std::chrono::high_resolution_clock> t_start;
-    std::string context;
-
-    void start(const std::string &_context) {
-        context = _context;
-        t_start = std::chrono::high_resolution_clock::now();
-    }
-    void stop() {
-        auto t_stop = std::chrono::high_resolution_clock::now();
-        std::cout << context << ": " << std::chrono::duration_cast<std::chrono::milliseconds>(t_stop - t_start).count()
-                  << " ms.\n";
-    }
-} timer;
 
 // DataFrames of type NoValue use a special version of std::vector that takes up
 // no space.
