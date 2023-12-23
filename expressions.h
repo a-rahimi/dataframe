@@ -50,7 +50,11 @@ struct Expr_DataFrame : Operations<Expr_DataFrame<_Tag, _Value>> {
     void next() { update_tagvalue(i + 1); }
 
     void advance_to_tag(Tag t) {
-        update_tagvalue(std::lower_bound(df.tags->begin(), df.tags->end(), t) - df.tags->begin());
+        auto l = std::lower_bound(df.tags->begin(), df.tags->end(), t);
+        if (*l == t)
+            update_tagvalue(l - df.tags->begin());
+        else
+            i = df.size();  // Didn't find the tag. It's the end of this expression.
     }
 };
 
@@ -248,10 +252,10 @@ struct Expr_Intersection : Operations<Expr_Intersection<Expr1, Expr2, MergeOp>> 
 
     void next() {
         _end = df2.end();
-        while (!df2.end()) {
+        for (; !df2.end(); df2.next()) {
             df1.advance_to_tag(df2.tag);
             if (df1.end())
-                continue;
+                continue;  // df1 has no matching tag. Move to the next tag in df2.
 
             tag = df2.tag;
             value = merge_op(df1.tag, df1.value, df2.value);

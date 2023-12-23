@@ -91,6 +91,15 @@ TEST(Expr_DataFrame, find_tag_missing) {
     EXPECT_TRUE(edf.end());
 }
 
+TEST(Expr_DataFrame, find_tag_missing_in_the_middle) {
+    auto df = DataFrame<int, float>({1, 3, 4}, {10., 30., 40.});
+    auto edf = to_expr(df);
+
+    edf.advance_to_tag(2);
+
+    EXPECT_TRUE(edf.end());
+}
+
 TEST(Expr_DataFrame, materialize) {
     DataFrame<int, float> original_df({1, 2, 3, 4}, {10., 20., 30., 40.});
     auto edf = Expr_DataFrame(original_df);
@@ -296,6 +305,18 @@ TEST(Collate, ReducedLeftDuplicates) {
 
     EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
     EXPECT_EQ(*g.values, (std::vector<float>{-1., 98., -3.}));
+}
+
+TEST(Collate, df1_has_missing_values) {
+    auto df1 = DataFrame<int, float>({1, 3}, {10., 30.});
+    auto df2 = DataFrame<int, float>({1, 2, 3}, {-11., -22., -33.});
+
+    auto g = df1.collate(df2, std::plus<>()).materialize();
+
+    EXPECT_EQ(g.size(), 2);
+
+    EXPECT_EQ(*g.tags, (std::vector<int>{1, 3}));
+    EXPECT_EQ(*g.values, (std::vector<float>{-1., -3.}));
 }
 
 TEST(Collate, Strings) {

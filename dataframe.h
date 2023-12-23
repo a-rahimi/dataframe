@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <cmath>
-#include <concepts>
 #include <functional>
 #include <memory>
 #include <numeric>
