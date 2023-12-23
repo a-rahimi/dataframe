@@ -1,3 +1,4 @@
+#include <concepts>
 #include <map>
 #include <type_traits>
 
@@ -7,8 +8,7 @@ struct DataFrame;
 template <typename Derived>
 struct Operations;
 
-/* A version of std::reference_wrapper that's equipped with a default constructor.
- */
+// A version of std::reference_wrapper that's equipped with a default constructor.
 template <typename T>
 struct reference {
     T *ptr;
@@ -37,23 +37,20 @@ struct Expr_DataFrame : Operations<Expr_DataFrame<_Tag, _Value>> {
     reference<Tag> tag;
     reference<Value> value;
 
-    Expr_DataFrame(DataFrame<Tag, Value> _df) : df(_df), i(0) { update_tagvalue(); }
+    Expr_DataFrame(DataFrame<Tag, Value> _df) : df(_df) { update_tagvalue(0); }
 
-    void update_tagvalue() {
+    void update_tagvalue(size_t _i) {
+        i = _i;
         tag = (*df.tags)[i];
         value = (*df.values)[i];
     }
 
     bool end() const { return i >= df.size(); }
 
-    void next() {
-        ++i;
-        update_tagvalue();
-    }
+    void next() { update_tagvalue(i + 1); }
 
     void advance_to_tag(Tag t) {
-        i = std::lower_bound(df.tags->begin(), df.tags->end(), t) - df.tags->begin();
-        update_tagvalue();
+        update_tagvalue(std::lower_bound(df.tags->begin(), df.tags->end(), t) - df.tags->begin());
     }
 };
 
@@ -95,8 +92,19 @@ auto to_expr(DataFrame<Tag, Value> df) {
 }
 
 template <typename Expr>
-auto to_expr(Expr df) {
+auto to_expr(Expr &df) {
     return df;
+}
+
+// Materialize an expression to a dataframe, and leave a dataframe intact.
+template <typename Tag, typename Value>
+auto to_dataframe(DataFrame<Tag, Value> df) {
+    return df;
+}
+
+template <typename Expr>
+auto to_dataframe(Expr df) {
+    return df.materialize();
 }
 
 template <typename Expr, typename Tag>
@@ -187,7 +195,7 @@ struct Expr_Reduction : Operations<Expr_Reduction<Expr, ReduceOp>> {
 };
 
 // Applies a function to every entry of a dataframe.
-template <typename Expr, typename Op>
+template <typename Expr, std::invocable<typename Expr::Tag, typename Expr::Value> Op>
 struct Expr_Apply : Operations<Expr_Apply<Expr, Op>> {
     Expr df;
     Op op;
@@ -219,7 +227,8 @@ struct Expr_Apply : Operations<Expr_Apply<Expr, Op>> {
 };
 
 // Inner join two dataframes.
-template <typename Expr1, typename Expr2, typename MergeOp>
+template <typename Expr1, typename Expr2,
+          std::invocable<typename Expr1::Tag, typename Expr1::Value, typename Expr2::Value> MergeOp>
 struct Expr_Intersection : Operations<Expr_Intersection<Expr1, Expr2, MergeOp>> {
     Expr1 df1;
     Expr2 df2;
@@ -312,28 +321,6 @@ struct ReduceAdaptor {
     }
 };
 
-template <typename Op>
-struct EmptyTagAdaptor {
-    Op op;
-    EmptyTagAdaptor(Op _op) : op(_op) {}
-    template <typename Tag, typename Value>
-    auto operator()(const Tag &t, const Value &v) {
-        return op(v);
-    }
-};
-
-template <typename CollateOp>
-struct WithTagPlaceholder {
-    CollateOp op;
-
-    WithTagPlaceholder(CollateOp _op) : op(_op) {}
-
-    template <typename Tag, typename Value1, typename Value2>
-    auto operator()(Tag, Value1 v1, Value2 v2) {
-        return op(v1, v2);
-    }
-};
-
 template <typename Tag, typename Value>
 struct Moments {
     size_t count;
@@ -344,9 +331,9 @@ struct Moments {
     auto var() const { return sum_squares / count - mean() * mean(); }
     auto std() const { return std::sqrt(var()); }
 
-    Moments operator()(Tag, Value v) { return Moments{1, v, v * v}; }
+    Moments operator()(Tag, const Value &v) { return Moments{1, v, v * v}; }
 
-    Moments operator()(Tag, Value v, const Moments &m) {
+    Moments operator()(Tag, const Value &v, const Moments &m) {
         return Moments{m.count + 1, m.sum + v, m.sum_squares + v * v};
     }
 };
@@ -355,21 +342,29 @@ template <typename Derived>
 struct Operations {
     auto to_expr() { return ::to_expr(static_cast<Derived &>(*this)); }
 
-    template <typename RetagOp>
+    auto to_dataframe() { return ::to_dataframe(static_cast<Derived &>(*this)); }
+
+    template <std::invocable<typename Derived::Tag, typename Derived::Value> RetagOp>
     auto retag(RetagOp compute_tag) {
         auto df = static_cast<Derived &>(*this);
         auto df_tags = df.apply_to_tags_and_values(compute_tag).materialize();
         return Expr_Retag(df_tags, df);
     }
 
-    template <typename ApplyOp>
+    template <typename Expr>
+    auto retag(Expr tag_expr) {
+        auto df = static_cast<Derived &>(*this);
+        return Expr_Retag(tag_expr.to_dataframe(), df);
+    }
+
+    template <std::invocable<typename Derived::Tag, typename Derived::Value> ApplyOp>
     auto apply_to_tags_and_values(ApplyOp op) {
         return Expr_Apply(to_expr(), op);
     }
 
-    template <typename ApplyOp>
+    template <std::invocable<typename Derived::Value> ApplyOp>
     auto apply_to_values(ApplyOp op) {
-        return Expr_Apply(to_expr(), EmptyTagAdaptor<ApplyOp>(op));
+        return Expr_Apply(to_expr(), [&op](typename Derived::Tag, const typename Derived::Value &v) { return op(v); });
     }
 
     template <typename ReduceOp, typename ValueAccumulator>
@@ -381,11 +376,22 @@ struct Operations {
         return Expr_Reduction(to_expr(), Moments<typename Derived::Tag, typename Derived::Value>());
     }
 
-    auto mean() {
+    auto reduce_mean() {
         return reduce_moments().apply_to_values([](const auto &m) { return m.mean(); });
     }
 
+    auto reduce_var() {
+        return reduce_moments().apply_to_values([](const auto &m) { return m.var(); });
+    }
+
+    auto reduce_std() {
+        return reduce_moments().apply_to_values([](const auto &m) { return m.std(); });
+    }
+
     auto reduce_count() {
+        // We could use reduce_moments() to implement this function, but I decided to exercise the
+        // reduce() function for now. Once reduce() has had enough exercise, it might make sense
+        // to implement this the same way reduce_mean is implemented.
         return reduce([](const Derived::Value &, size_t acc) { return acc + 1; },
                       [](const Derived::Value &) { return size_t(1); });
     }
@@ -396,14 +402,14 @@ struct Operations {
         return reduce([](Derived::Value v1, Derived::Value v2) { return v1 > v2 ? v1 : v2; }, std::identity());
     }
 
-    template <typename Expr, typename CollateOp>
+    template <typename Expr, std::invocable<typename Derived::Value, typename Expr::Value> CollateOp>
     auto collate(Expr df_other, CollateOp op) {
-        return Expr_Intersection(to_expr(), df_other.to_expr(), WithTagPlaceholder(op));
-    }
-
-    template <typename Expr>
-    auto collate_sum(Expr df_other) {
-        return Expr_Intersection(to_expr(), df_other.to_expr(), WithTagPlaceholder(std::plus<>()));
+        return Expr_Intersection(
+            to_expr(),
+            df_other.to_expr(),
+            [&op](const typename Expr::Tag &, const typename Derived::Value &v1, const typename Expr::Value &v2) {
+                return op(v1, v2);
+            });
     }
 
     template <typename Expr>

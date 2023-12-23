@@ -274,14 +274,17 @@ int main() {
     std::cout << "read " << tasks.size() << " tasks" << std::endl;
     std::cout << "total size " << tasks.size() * sizeof(Task) / 1024 / 1024 << " MB.\n";
     std::cout << tasks[0].v;
+    std::cout << '\n';
 
     timer.start("By accumulating with map optimized");
     auto NAET_with_map_optimized = compute_NAET_with_map_optimized(tasks);
     timer.stop();
+    std::cout << '\n';
 
     timer.start("By accumulating with map generic");
     auto NAET_with_map_generic = compute_NAET_with_map_generic(tasks);
     timer.stop();
+    std::cout << '\n';
 
     timer.start("By sorting expr total");
     {
@@ -290,28 +293,32 @@ int main() {
         timer.start("By sorting expr: retag expression");
         // An expression (a non-materialized dataframe) where each row is tagged with the associate_id
         // field of the corresponding record.
-        auto tasks_retagged = tasks.retag([](size_t, const Task& t) { return t.associate_id; });
+        auto tasks_retagged = tasks.retag(tasks.apply_to_values([](const Task& t) { return t.associate_id; }));
         timer.stop();
 
         timer.start("By sorting expr: Computing stats");
         // For each unit associate, compute the average value of the net_associate_effort field,
         // and store the result in a materialized dataframe (the * operator materializes and expression).
-        auto NAET = *tasks_retagged.apply_to_values([](const Task& t) { return t.net_associate_effort; }).mean();
+        auto NAET = *tasks_retagged.apply_to_values([](const Task& t) { return t.net_associate_effort; }).reduce_mean();
         timer.stop();
     }
     timer.stop();
+    std::cout << '\n';
 
     timer.start("By sorting 2 total");
     auto NAET_by_sorting_2 = compute_NAET_by_sorting_2(tasks);
     timer.stop();
+    std::cout << '\n';
 
     timer.start("By sorting map total");
     auto NAET_by_sorting_map = compute_NAET_by_sorting_map(tasks);
     timer.stop();
+    std::cout << '\n';
 
     timer.start("By sorting 3 total");
     auto NAET_by_sorting_3 = compute_NAET_by_sorting_3(tasks);
     timer.stop();
+    std::cout << '\n';
 
     // std::cout << NAET_by_sorting_map;
 }

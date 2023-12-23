@@ -10,7 +10,7 @@ Compile this demo with
 
 #include "dataframe.h"
 
-TEST(DataFrame, copy) {
+TEST(DataFrame, copy_by_reference) {
     auto df = DataFrame<int, float>({1, 2, 3, 4}, {10., 20., 30., 40.});
     auto df_copy = df;
 
@@ -18,6 +18,14 @@ TEST(DataFrame, copy) {
     EXPECT_EQ(df.values, df_copy.values);
     EXPECT_EQ(*df.tags, *df_copy.tags);
     EXPECT_EQ(*df.values, *df_copy.values);
+}
+
+TEST(DataFrame, to_dataframe_makes_reference) {
+    auto df = DataFrame<int, float>({1, 2, 3, 4}, {10., 20., 30., 40.});
+    auto df_copy = df.to_dataframe();
+
+    EXPECT_EQ(df.tags, df_copy.tags);
+    EXPECT_EQ(df.values, df_copy.values);
 }
 
 void modify_df(DataFrame<int, float> df) { (*df.values)[2] = 35.; }
@@ -49,6 +57,16 @@ TEST(DataFrame, scalar_index_TagValue_const) {
     const DataFrame<int, float> df({1, 2, 3, 4}, {10., 20., 30., 40.});
 
     EXPECT_EQ(df[1].v, 20.);
+}
+
+TEST(Expr_Dataframe, to_dataframe_materializes) {
+    auto df = DataFrame<int, float>({1, 2, 3, 4}, {10., 20., 30., 40.});
+    auto df_copy = df.to_expr().to_dataframe();
+
+    EXPECT_NE(df.tags, df_copy.tags);
+    EXPECT_NE(df.values, df_copy.values);
+    EXPECT_EQ(*df.tags, *df_copy.tags);
+    EXPECT_EQ(*df.values, *df_copy.values);
 }
 
 TEST(Expr_DataFrame, find_tag) {
@@ -261,7 +279,7 @@ TEST(Collate, ReducedSum) {
     auto df1 = DataFrame<int, float>({0, 0, 1}, {10., 20., 30.});
     auto df2 = DataFrame<int, float>({0, 1, 1}, {-11., -22., -33.});
 
-    auto g = df1.reduce_sum().collate_sum(df2.reduce_sum()).materialize();
+    auto g = df1.reduce_sum().collate(df2.reduce_sum(), std::plus<>()).materialize();
 
     EXPECT_EQ(g.size(), 2);
     EXPECT_EQ(*g.tags, (std::vector<int>{0, 1}));
@@ -272,7 +290,7 @@ TEST(Collate, ReducedLeftDuplicates) {
     auto df1 = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
     auto df2 = DataFrame<int, float>({1, 2, 3}, {-11., -22., -33.});
 
-    auto g = df1.reduce_sum().collate_sum(df2.reduce_sum()).materialize();
+    auto g = df1.reduce_sum().collate(df2.reduce_sum(), std::plus<>()).materialize();
 
     EXPECT_EQ(g.size(), 3);
 
@@ -284,7 +302,7 @@ TEST(Collate, Strings) {
     auto df1 = DataFrame<std::string, float>({"ali", "john"}, {1., 2.});
     auto df2 = DataFrame<std::string, float>({"ali", "john"}, {10., 20.});
 
-    auto g = df1.collate_sum(df2).materialize();
+    auto g = df1.collate(df2, std::plus<>()).materialize();
 
     EXPECT_EQ(*g.tags, *df1.tags);
     EXPECT_EQ(*g.values, std::vector<float>({11., 22.}));
@@ -482,6 +500,16 @@ TEST(Retag, floats_with_repeats) {
 TEST(Retag, floats_with_repeats_2) {
     auto df = DataFrame<std::string, float>({"hi", "ho", "ho", "hello"}, {20., 10., 10., 30.});
     auto g = *df.retag([](const std::string &t, float v) { return -v; });
+
+    EXPECT_EQ(g.size(), 4);
+    EXPECT_EQ(*g.tags, (std::vector<float>{-30., -20., -10., -10.}));
+    EXPECT_EQ(*g.values, (std::vector<float>{30., 20., 10., 10.}));
+}
+
+TEST(Retag, materialized_dataframes) {
+    auto df_values = DataFrame<std::string, float>({"hi1", "ho1", "ho1", "hello1"}, {20., 10., 10., 30.});
+    auto df_tags = DataFrame<std::string, float>({"hi2", "ho2", "ho2", "hello2"}, {-20., -10., -10., -30.});
+    auto g = *df_values.retag(df_tags);
 
     EXPECT_EQ(g.size(), 4);
     EXPECT_EQ(*g.tags, (std::vector<float>{-30., -20., -10., -10.}));
