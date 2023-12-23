@@ -536,3 +536,9 @@ TEST(Retag, materialized_dataframes) {
     EXPECT_EQ(*g.tags, (std::vector<float>{-30., -20., -10., -10.}));
     EXPECT_EQ(*g.values, (std::vector<float>{30., 20., 10., 10.}));
 }
+
+TEST(Argsort, strings) {
+    std::vector<size_t> indices;
+    argsort(std::vector<std::string>{"Zaa", "Aaa", "Bbb"}, indices);
+    EXPECT_EQ(indices, (std::vector<size_t>{1, 2, 0}));
+}

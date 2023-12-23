@@ -117,6 +117,19 @@ void advance_to_tag_by_linear_search(Expr &df, Tag t) {
         df.next();
 }
 
+template <typename T>
+void argsort(const std::vector<T> &array, std::vector<size_t> &indices) {
+    std::map<T, std::vector<size_t>> indices_map;
+
+    for (size_t i = 0; i < array.size(); ++i)
+        indices_map[array[i]].push_back(i);
+
+    // Read the map back in sorted order and store the indices.
+    for (const auto &[tag, indices_for_tag] : indices_map)
+        for (size_t i : indices_for_tag)
+            indices.push_back(i);
+}
+
 // Compute new tags on a materialized dataframe.
 template <typename Tag1, typename Value1, typename Tag2, typename Value2>
 struct Expr_Retag : Operations<Expr_Retag<Tag1, Value1, Tag2, Value2>> {
@@ -135,23 +148,13 @@ struct Expr_Retag : Operations<Expr_Retag<Tag1, Value1, Tag2, Value2>> {
         : df_tags(_df_tags), df_values(_df_values), traversal_order(new std::vector<size_t>) {
         if (df_tags.size() != df_values.size())
             throw std::invalid_argument("df_tags and df_values must have the same length");
-
-        // Compute the ordering by pushing every tag into a map that translates
-        // a tag to the index of df_tags where the tag came from.
-        std::map<Value1, std::vector<size_t>> traversal_order_map;
-        for (size_t i = 0; i < df_tags.size(); ++i)
-            traversal_order_map[(*df_tags.values)[i]].push_back(i);
-
-        // Read the map back in sorted order and store the indices.
-        for (const auto &[tag, indices] : traversal_order_map)
-            for (size_t i : indices)
-                traversal_order->push_back(i);
+        argsort(*df_tags.values, *traversal_order);
         update_tagvalue(0);
     }
 
     void update_tagvalue(size_t _i) {
         i = _i;
-        if (_i >= df_values.size())
+        if (end())
             return;
         tag = (*df_tags.values)[(*traversal_order)[_i]];
         value = (*df_values.values)[(*traversal_order)[_i]];
