@@ -71,7 +71,7 @@ struct Expr_DataFrame<RangeTag, _Value> : Operations<Expr_DataFrame<RangeTag, _V
 
     void update_tagvalue(size_t _i) {
         i = _i;
-        if (_i >= df.size())
+        if (end())
             return;
 
         tag = _i;

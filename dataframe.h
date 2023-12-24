@@ -46,7 +46,7 @@ struct DataFrame : Operations<DataFrame<_Tag, _Value>> {
     size_t size() const { return tags->size(); }
 
     template <typename ValueOther>
-    auto operator[](const DataFrame<_Tag, ValueOther> &index) {
+    auto operator[](const DataFrame<Tag, ValueOther> &index) {
         return Expr_Intersection(to_expr(*this),
                                  to_expr(index),
                                  [](Tag, Value v, typename DataFrame<_Tag, ValueOther>::Value) { return v; });
@@ -54,14 +54,14 @@ struct DataFrame : Operations<DataFrame<_Tag, _Value>> {
 
     auto operator[](size_t i) {
         struct TagValue {
-            const Tag &t;
+            Tag t;
             Value &v;
         };
         return TagValue{(*tags)[i], (*values)[i]};
     }
     auto operator[](size_t i) const {
         struct TagValueConst {
-            const Tag &t;
+            Tag t;
             const Value &v;
         };
         return TagValueConst{(*tags)[i], (*values)[i]};
@@ -72,56 +72,15 @@ struct DataFrame : Operations<DataFrame<_Tag, _Value>> {
 // computes them as needed.
 template <>
 struct std::vector<RangeTag> {
+    using value_type = size_t;
+
     size_t sz;
+
+    vector(size_t _sz) : sz(_sz) {}
+    vector() : sz(0) {}
 
     size_t size() const { return sz; }
     size_t operator[](size_t i) const { return i; }
-};
-
-/* Dataframes specialized to range tags.
-
-These require special handling because the indexing operation returns a
-different type of dataframe.
-*/
-template <typename _Value>
-struct DataFrame<RangeTag, _Value> : Operations<DataFrame<RangeTag, _Value>> {
-    using Tag = size_t;
-    using Value = _Value;
-
-    std::shared_ptr<std::vector<RangeTag>> tags;
-    std::shared_ptr<std::vector<Value>> values;
-
-    DataFrame() : tags(new std::vector<RangeTag>), values(new std::vector<Value>) {}
-
-    DataFrame(const std::vector<Value> &_values)
-        : tags(new std::vector<RangeTag>{_values.size()}), values(new auto(_values)) {}
-
-    DataFrame(const std::vector<RangeTag> &_tags, const std::vector<Value> &_values)
-        : tags(new auto(_tags)), values(new auto(_values)) {}
-
-    size_t size() const { return values->size(); }
-
-    template <typename ValueOther>
-    auto operator[](const DataFrame<size_t, ValueOther> &index) {
-        return Expr_Intersection(to_expr(*this),
-                                 to_expr(index),
-                                 [](size_t, Value v, typename DataFrame<size_t, ValueOther>::Value) { return v; });
-    }
-
-    auto operator[](size_t i) {
-        struct TagValue {
-            Tag t;
-            Value &v;
-        };
-        return TagValue{i, (*values)[i]};
-    }
-    auto operator[](size_t i) const {
-        struct TagValueConst {
-            const Tag t;
-            const Value &v;
-        };
-        return TagValueConst{i, (*values)[i]};
-    }
 };
 
 // DataFrames of type ConstantValue use a special version of std::vector that takes up

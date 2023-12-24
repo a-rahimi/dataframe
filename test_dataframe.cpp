@@ -397,19 +397,16 @@ TEST(Columnar, Simple) {
     EXPECT_EQ(toes_per_tooth[1].v, 10.f / 32);
 }
 
-TEST(RangeTags, implicit_tags) {
-    auto df_implicit = DataFrame<RangeTag, int>({-1, -2, -3, -4, -5});
-    auto df_explicit = DataFrame<RangeTag, int>({5}, {-1, -2, -3, -4, -5});
-
-    EXPECT_NE(df_implicit.tags, df_explicit.tags);
-    EXPECT_EQ(df_implicit.tags->size(), df_explicit.tags->size());
-}
-
 TEST(RangeTags, advance_to_tag) {
-    auto df = DataFrame<RangeTag, int>({-1, -2, -3, -4, -5});
+    auto df = DataFrame<RangeTag, int>({5}, {-1, -2, -3, -4, -5});
+    EXPECT_EQ(df.tags->size(), 5);
+
     auto edf = to_expr(df);
 
     edf.advance_to_tag(3);
+    EXPECT_EQ(edf.i, 3);
+    EXPECT_EQ(edf.tag, 3);
+    EXPECT_EQ(edf.value, -4);
 
     auto [t, v] = df[edf.i];
     EXPECT_EQ(t, 3);
@@ -417,7 +414,7 @@ TEST(RangeTags, advance_to_tag) {
 }
 
 TEST(RangeTags, advance_to_tag_Missing) {
-    auto df = DataFrame<RangeTag, int>({-1, -2, -3, -4, -5});
+    auto df = DataFrame<RangeTag, int>({5}, {-1, -2, -3, -4, -5});
     auto edf = to_expr(df);
 
     edf.advance_to_tag(20);
@@ -426,7 +423,7 @@ TEST(RangeTags, advance_to_tag_Missing) {
 }
 
 TEST(RangeTags, Indexing) {
-    auto df = DataFrame<RangeTag, int>({-1, -2, -3, -4, -5});
+    auto df = DataFrame<RangeTag, int>({5}, {-1, -2, -3, -4, -5});
     auto i = DataFrame<size_t, ConstantValue<int>>({2, 3}, {0});
     auto c = *df[i];
 
@@ -555,3 +552,21 @@ struct Match {
     int score_player_1;
     int score_player_2;
 };
+/*
+TEST(MatchDemo, demo) {
+    DataFrame<RangeTag, Match> matches({
+        {"ali",   "john",  10, 5},
+        {"ali",   "john",  6,  8},
+        {"ali",   "misha", 4,  6},
+        {"misha", "john",  5,  7},
+    });
+
+    auto winner =
+        matches.apply([](const Match &m) { return m.score_player_1 > m.score_player_2 ? m.player1 : m.player2; });
+    auto all_players =
+        matches.apply([](const Match &m) { return m.player1; }).concatenate(matches.apply([](const Match &m) {
+            return m.player2;
+        }));
+    auto all_player_1 = DataFrame<RangeTag, NoValue>()
+}
+*/
