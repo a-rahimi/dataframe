@@ -11,33 +11,29 @@ struct Operations;
 // A version of std::reference_wrapper that's equipped with a default constructor.
 template <typename T>
 struct reference {
-    T *ptr;
+    T const *ptr;
 
     reference() : ptr(0) {}
-    reference &operator=(T &&v) {
+    reference &operator=(const T &v) {
         ptr = &v;
         return *this;
     }
-    reference &operator=(T &v) {
-        ptr = &v;
-        return *this;
-    }
-    operator T &() const { return *ptr; }
+    operator const T &() const { return *ptr; }
     bool operator==(reference<T> other) { return *ptr == *other.ptr; }
 };
 
 // A wrapper for a materialized dataframe.
 template <typename _Tag, typename _Value>
 struct Expr_DataFrame : Operations<Expr_DataFrame<_Tag, _Value>> {
-    using Tag = _Tag;
-    using Value = _Value;
+    using Tag = DataFrame<_Tag, _Value>::Tag;
+    using Value = DataFrame<_Tag, _Value>::Value;
 
-    DataFrame<Tag, Value> df;
+    DataFrame<_Tag, _Value> df;
     size_t i;
     reference<Tag> tag;
     reference<Value> value;
 
-    Expr_DataFrame(DataFrame<Tag, Value> _df) : df(_df) { update_tagvalue(0); }
+    Expr_DataFrame(DataFrame<_Tag, _Value> _df) : df(_df) { update_tagvalue(0); }
 
     void update_tagvalue(size_t _i) {
         i = _i;
@@ -64,14 +60,14 @@ struct RangeTag;
 template <typename _Value>
 struct Expr_DataFrame<RangeTag, _Value> : Operations<Expr_DataFrame<RangeTag, _Value>> {
     using Tag = size_t;
-    using Value = _Value;
+    using Value = DataFrame<RangeTag, _Value>::Value;
 
     DataFrame<RangeTag, Value> df;
     size_t i;
     Tag tag;
     reference<Value> value;
 
-    Expr_DataFrame(DataFrame<RangeTag, Value> _df) : df(_df) { update_tagvalue(0); }
+    Expr_DataFrame(DataFrame<RangeTag, _Value> _df) : df(_df) { update_tagvalue(0); }
 
     void update_tagvalue(size_t _i) {
         i = _i;
@@ -117,6 +113,8 @@ void advance_to_tag_by_linear_search(Expr &df, Tag t) {
         df.next();
 }
 
+// Compute the ordering of the elemnts of a vector that would cause it to get
+// sorted.
 template <typename T>
 void argsort(const std::vector<T> &array, std::vector<size_t> &indices) {
     std::map<T, std::vector<size_t>> indices_map;
@@ -131,20 +129,20 @@ void argsort(const std::vector<T> &array, std::vector<size_t> &indices) {
 }
 
 // Compute new tags on a materialized dataframe.
-template <typename Tag1, typename Value1, typename Tag2, typename Value2>
-struct Expr_Retag : Operations<Expr_Retag<Tag1, Value1, Tag2, Value2>> {
-    DataFrame<Tag1, Value1> df_tags;
-    DataFrame<Tag2, Value2> df_values;
+template <typename TagT, typename ValueT, typename TagV, typename ValueV>
+struct Expr_Retag : Operations<Expr_Retag<TagT, ValueT, TagV, ValueV>> {
+    DataFrame<TagT, ValueT> df_tags;
+    DataFrame<TagV, ValueV> df_values;
 
-    using Tag = Value1;
-    using Value = Value2;
+    using Tag = DataFrame<TagT, ValueT>::Value;
+    using Value = DataFrame<TagV, ValueV>::Value;
 
     reference<Tag> tag;
     reference<Value> value;
     size_t i;
     std::shared_ptr<std::vector<size_t>> traversal_order;
 
-    Expr_Retag(DataFrame<Tag1, Tag> _df_tags, DataFrame<Tag2, Value> _df_values)
+    Expr_Retag(DataFrame<TagT, ValueT> _df_tags, DataFrame<TagV, ValueV> _df_values)
         : df_tags(_df_tags), df_values(_df_values), traversal_order(new std::vector<size_t>) {
         if (df_tags.size() != df_values.size())
             throw std::invalid_argument("df_tags and df_values must have the same length");
@@ -345,6 +343,8 @@ struct Moments {
     }
 };
 
+// The base class for Expr_*'s and materialized dataframes. These operations can
+// be applied to both.
 template <typename Derived>
 struct Operations {
     auto to_expr() { return ::to_expr(static_cast<Derived &>(*this)); }

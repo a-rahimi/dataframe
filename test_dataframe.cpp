@@ -59,6 +59,12 @@ TEST(DataFrame, scalar_index_TagValue_const) {
     EXPECT_EQ(df[1].v, 20.);
 }
 
+TEST(DataFrame, constant_value) {
+    const DataFrame<int, ConstantValue<std::string>> df({1, 2, 3, 4}, {"hello"});
+
+    EXPECT_EQ(df[1].v, "hello");
+}
+
 TEST(Expr_Dataframe, to_dataframe_materializes) {
     auto df = DataFrame<int, float>({1, 2, 3, 4}, {10., 20., 30., 40.});
     auto df_copy = df.to_expr().to_dataframe();
@@ -130,10 +136,10 @@ TEST(Index, Simple) {
     EXPECT_EQ(*g.values, (std::vector<float>{20., 30.}));
 }
 
-TEST(Index, NoValues) {
+TEST(Index, ConstantValue) {
     auto df = DataFrame<int, float>({1, 2, 3, 4}, {10., 20., 30., 40.});
 
-    auto i = DataFrame<int, NoValue>({2, 3}, {});
+    auto i = DataFrame<int, ConstantValue<int>>({2, 3}, {0});
 
     auto g = df[i].materialize();
 
@@ -421,7 +427,7 @@ TEST(RangeTags, advance_to_tag_Missing) {
 
 TEST(RangeTags, Indexing) {
     auto df = DataFrame<RangeTag, int>({-1, -2, -3, -4, -5});
-    auto i = DataFrame<size_t, NoValue>({2, 3}, {});
+    auto i = DataFrame<size_t, ConstantValue<int>>({2, 3}, {0});
     auto c = *df[i];
 
     EXPECT_EQ(*c.tags, (std::vector<size_t>{2, 3}));
@@ -542,3 +548,10 @@ TEST(Argsort, strings) {
     argsort(std::vector<std::string>{"Zaa", "Aaa", "Bbb"}, indices);
     EXPECT_EQ(indices, (std::vector<size_t>{1, 2, 0}));
 }
+
+struct Match {
+    std::string player1;
+    std::string player2;
+    int score_player_1;
+    int score_player_2;
+};

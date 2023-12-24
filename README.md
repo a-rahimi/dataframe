@@ -2,13 +2,13 @@
 
 Dataframes are data structures that facilitate statistical operations on
 datasets. They borrow ideas from data query languages like SQL, but instead of
-providing a standalone language, they're intended to be used inside a host
-programming language. Since their introduction to the S programming language in
-1990, dataframes have been enhanced and cleaned up in many ways. For example,
-the R programming language introduced [dplyr](http://dplyr.tidyverse.org), which
-expands the semantics of data frames, [Pandas](https://pandas.pydata.org)
-implements dataframes for Python, and [Polars](https://www.pola.rs) implements
-them in Rust.
+providing a standalone language, operate inside a host programming language.
+Since their introduction to the S programming language in 1990, dataframes have
+been enhanced and cleaned up in many ways. For example, the R programming
+language introduced [dplyr](http://dplyr.tidyverse.org), which expands the
+semantics of data frames, [Pandas](https://pandas.pydata.org) implements
+dataframes for Python, and [Polars](https://www.pola.rs) implements them in
+Rust.
 
 Traditionally, dataframes are two-dimensional tables, like tables in relational
 database, or like numerical matrices.  But unlike a matrix, a dataframe may contain
@@ -23,123 +23,93 @@ whenever some of their entries match (similar to SQL's "JOIN").
 
 This package implements a new, simplified dataframe in C++ in a way that takes
 advantage of C++'s static typing, templating system, and data structure
-facilities.
+facilities.  The C++ compiler can find bugs in your statistical statistical
+reasoning through type checking, and can generate very fast code by fusing
+operations at compile time.
 
 # How this package differs from other dataframe packages
 
-Dataframes in R and Python are helpful because they speed up with native code
-operations that would otherwise be slow in interpreted code. For example,
+Dataframes in R and Python are useful because they implement in native code
+operations that would otherwise be slow in interpreted code.  For example,
 applying a user-supplied Python function to every row of a Pandas dataframe is
 slow, so Pandas implements a huge variety of operations in native code to avoid
 calling Python callbacks.  In C++, this is not an issue.  Applying a
 user-supplied C++ lambda to every row of a dataframe is not any slower than
 applying a built-in method. That means a C++ dataframe library can focus on
 implementing high level operations on dataframes rather than implementing all
-basic operation imaginable.  Another consideration is that C++ structs already
-provide rich ways to manipulate structured data. For example, C++ already has
-facilities to combine two different types of struct into one new struct and
-handle the resulting conflicting field names through multiple inheritance.  But
-in interpreted languages, structured data have to be represented through dynamic
-data structures that are slower to manipulate. This is contrary to the approach
-[a well-established C++ dataframe
+basic operation imaginable.
+
+Dataframes in Python store data efficiently in a way that avoids boxing and
+unboxing primitive types like floats and ints into Python objects.  But in C++,
+primitive types aren't boxed, so arrays of C++ objects can be stored and access
+without overhead.  Furthermore, C++ structs already provide rich ways to
+manipulate structured data that obviates the need for many of the features of a
+dataframe.  For example, C++ already has facilities to combine two different
+types of struct into one new struct and handle the resulting conflicting field
+names through multiple inheritance.  But in interpreted languages, structured
+data have to be represented through dynamic data structures that are slower to
+manipulate. This is contrary to the approach [a well-established C++ dataframe
 package](https://github.com/hosseinmoein/DataFrame) takes, where dataframes are
 entirely dynamic objects with similar semantics as Pandas.  
 
 Here are the overarching desgin goals of this package:
 
 * Do as much work at compile-time as possible. The dataframes are statically
-  typed so there is no overhead to represent schemas, or to interpret datatypes at
-  run-time. Operations on dataframes can be fused together at compile time, so
-  that chaining operations doesn't result in large temporary dataframes to be
-  dymamically allocated.
+typed so there is no overhead to represent schemas, or to interpret datatypes at
+run-time. Operations on dataframes can be fused together at compile time, so
+that chaining operations doesn't result in large temporary dataframes to be
+dymamically allocated.
 
-* Easy to port to new compute backends. Most of
-  the operations reduce to a call to one of three algorithms: Expr_Union,
-  Expr_Intersection, and Expr_Reduce.  When porting the package to a new compute
-  substrate, like a distributed system or a GPU, one just needs to port these
-  three operations and leave the rest of the code intact.
-
-* Simple semantics. The dataframe semantics in this package are slightly more
-  complicated than those of Polars, which does not rely on a notion of an index,
-  but significantly simpler than those of dplyr or Pandas. The fact that most
-  operations reduce to Expr_Union, Expr_Intersection, and Expr_Reduce also makes
-  it easy to optimize query plans, because it's easier to reason about
-  compositions of of three operators than compositions of a large number of basic
-  operations. 
-
-Implementing a new dataframe library or porting one to a new compute engine (for
-example a distributed system, or a GPU) is a lot of work because the algebra on
+* Easy to port to new compute backends, and easy to optimize.  The algebra on
 a traditional dataframe is surprisingly complicated.  For example [this
 analysis](https://escholarship.org/uc/item/9x5608wr) derives a dataframe API
 with 14 entry points. The API for R's dplyr dataframe package ostensibly has
 only five entry points ("mutate", "select", "filter", "summarize", and
 "arrange"), but each entry point provides a plethora of options that radically
 modify their behavior. Some of these entry points even provide a mini-language
-of their own.
+of their own.  Most of the operations in this package reduce to a call to one of
+three basic operations: Expr_Union, Expr_Intersection, and Expr_Reduce.  When
+porting the package to a new compute substrate, like a distributed system or a
+GPU, its enough to port these three operations and leave the rest of the code
+intact.  The fact that most operations reduce to Expr_Union, Expr_Intersection,
+and Expr_Reduce also makes it easy to optimize query plans, because it's easier
+to reason about compositions of of three operators than compositions of a large
+number of basic operations. 
 
-The semantics for the dataframes implemented in this package are simple to
-define an implement.
+* Simple semantics. The dataframe semantics in this package are slightly more
+complicated than those of Polars, which does not have a notion of an index, but
+significantly simpler than those of dplyr or Pandas. This package introduces the
+concept of "tags" as an alternative to an index. Tags are described below. I am
+hoping they are easier to work with than indices. When I read pandas code, I
+find it hard to remember how a dataframe is indexed at a particular point in the
+code, so I'm often surprised by the arguments of `loc[]` or `groupby(level)`.
+Hopefully the combination of tags and explicit dataframe types avoid these
+problems.
 
 This package borrows and modifies the notion of an index from SQL and Pandas.
 These indices are called "tags" here, and they are involved in every operation
-the package implements, including join, groupby, and indexing.  A dataframe is a
-vector of tagged values. The value of the vector can be any datatype, including
-plain datatypes like ints or floats, or user-defined data-types like structs or
-classes.  The entries in the dataframe are sorted in ascending order of their
-tags. These tags can be of any type as well, as long as they support comparison
-operators like "<" and "==". These tags serve several purposes, including that
-of an index in traditional dataframes. By default the entries are tagged by
-consecutive integers, so that the tags are just the index value of each value in
-the array (in this case the tags are implied and aren't actually stored).
-Joining two dataframes amounts to combining entries of two dataframes that have
-the same tag value. The groupby operation reduces all entries of a dataframe
-that have the same tag value.  Select entries of a dataframe happens by
-collecting all entries that have a given set of tag values. 
-
-All operations on a dataframe are defined in terms of three basic operations:
-
-* Expr_Union combines the rows of two dataframes into one dataframe whose
-  rows in sorted in order of their tags. This operation is analogous to an outer join in SQL.
-
-* Expr_Intersect combines two dataframes into one dataframe by selecting only
-  rows of the two dataframes that have the same tag,
-  and combining the values of these rows with a user-supplied function. This operation is analogous to an inner join in SQL. 
-
-* Expr_Reduce combines all the entries of a dataframe that have the same tag
-  into one entry. This combination operation is a reduction with a user-supplied
-  binary operator. This operation resembles a group-by operation in SQL.
-
-Under the hood, these operators produce one entry of their output dataframe, and
-return. When you chain together, say an Expr_Union and an Expr_Reduce, you're
-actually constructing an object that generates one entry of a new dataframe at a
-time by sequentially invoking Expr_Union, which then invokves Expr_Reduce for
-each row of the dataframe. This way, we avoid producing a temporary dataframe
-for Expr_Reduce first, and feeding this temporary to Expr_Union, only to then
-delete Expr_Reduce's output.
-
-Unlike traditional dataframes, this package does not take a position on row-wise
-vs columnar storage. Its dataframe are 1D vectors.  When the elements of these
-vectors are records, the dataframes behave like row-wise dataframes. When
-several vectors of scalars are combined in a C++ struct, they behave like a
-columnar store. See the section below for details.
-
-
-# Dataframe Semantics
-
-##  Data types
-
-A dataframe is tuple of two vectors: a tag vector, and a values vector:
+the package implements, including join, groupby, and indexing.  In this package,
+a dataframe is a vector of values, and each of these values is tagged with
+another value:
 
 ```
-DataFrame<Tag, T> = (tags: std::vector<Tag>, values: std::vector<T>)
+DataFrame = vector[pair[Tag, Value]]
 ```
 
-We'll rely on some special subtypes of `std::vector` to speed up certain
-operations.  For example, `std::vector<Range>`, represents an arithmetic
-sequence of integers and is used to represent the default tags. This vector
-doesn't actually store the values of these sequences. Instead, it computes them
-as needed. The merge operation follows an accelerated path in these cases.
+The entries in values can be any datatype, including plain datatypes like ints
+or floats, or user-defined data-types like structs or classes.  These tags can
+also be of any type, as long as they support comparison with "<".  The entries
+in the dataframe are sorted in ascending order of their tags.  These tags serve
+several purposes, including that of an index in traditional dataframes. By
+default the entries are tagged by consecutive integers, so that the tags are
+just the row id of each value in the array (in this case the tags are implied
+and aren't actually stored).  Joining two dataframes amounts to combining
+entries of the dataframes that have matching tags. The groupby operation reduces
+all entries of a dataframe that have the same tag value.  Selecting entries of a
+dataframe happens by collecting all entries that have a given set of tag values.
 
+
+# Dataframe Operations
 
 ## Indexing (intersection)
 
@@ -155,10 +125,10 @@ c: DataFrame<Tag, ValueA>
 c = a[b] 
 ```
 
-Returns a dataframe that consists of rows of `a` that have the same
-tag as `b`.  Duplicated tags in `b` result in duplicated tags in `c`. Duplicated
-tags in `a` result in undefined behavior (in reality, the first entry with the
-matching tag is used).
+In the above, `c` becomes a dataframe that consists of rows of `a` that have the
+same tag as `b`.  Duplicated tags in `b` result in duplicated tags in `c`.
+Duplicated tags in `a` result in undefined behavior (in reality, the first entry
+with the matching tag is used).
 
 This operation is implemented under the hood with Expr_Intersect.
 
@@ -168,7 +138,7 @@ Example:
 auto df = DataFrame<int, float>{.tags={1, 2, 3, 4}, .values={10., 20., 30., 40.}};
 
 // A dataframe with tags 2, 3, and values that will be ignored when indexing.
-auto i = DataFrame<int, float>{.tags={2, 3}, .values={-20., -30.}};
+auto i = DataFrame<int, NoValue>{{2, 3}};
 
 // g has two entries, with tags 2 and 3 and values 20. and 30.
 auto g = df[i];
@@ -336,3 +306,36 @@ auto toes_per_tooth = df.num_toes.collate(
     [](int a, int b) { return float(a) / b; }
 );
 ```
+
+# Under the Hood
+
+Almost all the operations in this package  are defined in terms of three basic
+operations:
+
+
+* Expr_Union combines the rows of two dataframes into one dataframe whose
+rows in sorted in order of their tags. This operation is analogous to an outer
+join in SQL.
+
+* Expr_Intersect combines two dataframes into one dataframe by selecting only
+rows of the two dataframes that have the same tag, and combining the values of
+these rows with a user-supplied function. This operation is analogous to an
+inner join in SQL. 
+
+* Expr_Reduce combines all the entries of a dataframe that have the same tag
+into one entry. This combination operation is a reduction with a user-supplied
+binary operator. This operation resembles a group-by operation in SQL.
+
+Under the hood, these operators produce one entry of their output dataframe, and
+return. When you chain together, say an Expr_Union and an Expr_Reduce, you're
+actually constructing an object that generates one entry of a new dataframe at a
+time by sequentially invoking Expr_Union, which then invokves Expr_Reduce for
+each row of the dataframe. This way, we avoid producing a temporary dataframe
+for Expr_Reduce first, and feeding this temporary to Expr_Union, only to then
+delete Expr_Reduce's output.
+
+Unlike traditional dataframes, this package does not take a position on row-wise
+vs columnar storage. Its dataframe are 1D vectors.  When the elements of these
+vectors are records, the dataframes behave like row-wise dataframes. When
+several vectors of scalars are combined in a C++ struct, they behave like a
+columnar store. See the section below for details.
