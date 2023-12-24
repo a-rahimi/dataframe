@@ -2,29 +2,35 @@
 #include <map>
 #include <type_traits>
 
-// Forward declaration of a materialized dataframe.
+// Forward declaration.
 template <typename Tag, typename Value>
 struct DataFrame;
+
 template <typename Derived>
-struct Operations;
+struct Expr_Operations;
+
+struct RangeTag;
 
 // A version of std::reference_wrapper that's equipped with a default constructor.
+//
+// TODO: rename this to const_reference. Because the `ptr` member is T const *,
+// the value that underlies this reference can't be changed.
 template <typename T>
 struct reference {
     T const *ptr;
 
     reference() : ptr(0) {}
-    reference &operator=(const T &v) {
-        ptr = &v;
-        return *this;
-    }
+    auto operator=(const reference &) = delete;
+
+    void refer(const T &v) { ptr = &v; }
     operator const T &() const { return *ptr; }
-    bool operator==(reference<T> other) { return *ptr == *other.ptr; }
+    bool operator==(const reference<T> other) { return *ptr == *other.ptr; }
+    bool operator==(const T &other) { return *ptr == other; }
 };
 
 // A wrapper for a materialized dataframe.
 template <typename _Tag, typename _Value>
-struct Expr_DataFrame : Operations<Expr_DataFrame<_Tag, _Value>> {
+struct Expr_DataFrame : Expr_Operations<Expr_DataFrame<_Tag, _Value>> {
     using Tag = DataFrame<_Tag, _Value>::Tag;
     using Value = DataFrame<_Tag, _Value>::Value;
 
@@ -37,8 +43,8 @@ struct Expr_DataFrame : Operations<Expr_DataFrame<_Tag, _Value>> {
 
     void update_tagvalue(size_t _i) {
         i = _i;
-        tag = (*df.tags)[i];
-        value = (*df.values)[i];
+        tag.refer((*df.tags)[i]);
+        value.refer((*df.values)[i]);
     }
 
     bool end() const { return i >= df.size(); }
@@ -54,11 +60,9 @@ struct Expr_DataFrame : Operations<Expr_DataFrame<_Tag, _Value>> {
     }
 };
 
-struct RangeTag;
-
 // A wrapper for a materialized RangeTag dataframe.
 template <typename _Value>
-struct Expr_DataFrame<RangeTag, _Value> : Operations<Expr_DataFrame<RangeTag, _Value>> {
+struct Expr_DataFrame<RangeTag, _Value> : Expr_Operations<Expr_DataFrame<RangeTag, _Value>> {
     using Tag = size_t;
     using Value = DataFrame<RangeTag, _Value>::Value;
 
@@ -75,7 +79,7 @@ struct Expr_DataFrame<RangeTag, _Value> : Operations<Expr_DataFrame<RangeTag, _V
             return;
 
         tag = _i;
-        value = (*df.values)[_i];
+        value.refer((*df.values)[_i]);
     }
 
     bool end() const { return i >= df.size(); }
@@ -85,7 +89,8 @@ struct Expr_DataFrame<RangeTag, _Value> : Operations<Expr_DataFrame<RangeTag, _V
     void advance_to_tag(Tag t) { update_tagvalue(t); }
 };
 
-// Convert a dataframe to a Expr_DataFrame. If the argument is already a Expr_DataFrame, just return it as is.
+// Convert a dataframe to a Expr_DataFrame. If the argument is already a
+// Expr_DataFrame, just return it as is.
 template <typename Tag, typename Value>
 auto to_expr(DataFrame<Tag, Value> df) {
     return Expr_DataFrame(df);
@@ -130,7 +135,7 @@ void argsort(const std::vector<T> &array, std::vector<size_t> &indices) {
 
 // Compute new tags on a materialized dataframe.
 template <typename TagT, typename ValueT, typename TagV, typename ValueV>
-struct Expr_Retag : Operations<Expr_Retag<TagT, ValueT, TagV, ValueV>> {
+struct Expr_Retag : Expr_Operations<Expr_Retag<TagT, ValueT, TagV, ValueV>> {
     DataFrame<TagT, ValueT> df_tags;
     DataFrame<TagV, ValueV> df_values;
 
@@ -154,8 +159,8 @@ struct Expr_Retag : Operations<Expr_Retag<TagT, ValueT, TagV, ValueV>> {
         i = _i;
         if (end())
             return;
-        tag = (*df_tags.values)[(*traversal_order)[_i]];
-        value = (*df_values.values)[(*traversal_order)[_i]];
+        tag.refer((*df_tags.values)[(*traversal_order)[_i]]);
+        value.refer((*df_values.values)[(*traversal_order)[_i]]);
     }
 
     void next() { update_tagvalue(i + 1); }
@@ -169,7 +174,7 @@ struct Expr_Retag : Operations<Expr_Retag<TagT, ValueT, TagV, ValueV>> {
 
 // Reduces entries of a dataframe that have the same tag.
 template <typename Expr, typename ReduceOp>
-struct Expr_Reduction : Operations<Expr_Reduction<Expr, ReduceOp>> {
+struct Expr_Reduction : Expr_Operations<Expr_Reduction<Expr, ReduceOp>> {
     Expr df;
     ReduceOp reduce_op;
 
@@ -185,7 +190,7 @@ struct Expr_Reduction : Operations<Expr_Reduction<Expr, ReduceOp>> {
     void next() {
         _end = df.end();
 
-        tag = df.tag;
+        tag.refer(df.tag);
         auto accumulation = reduce_op(df.tag, df.value);
 
         for (df.next(); !df.end() && (df.tag == tag); df.next())
@@ -201,7 +206,7 @@ struct Expr_Reduction : Operations<Expr_Reduction<Expr, ReduceOp>> {
 
 // Applies a function to every entry of a dataframe.
 template <typename Expr, std::invocable<typename Expr::Tag, typename Expr::Value> Op>
-struct Expr_Apply : Operations<Expr_Apply<Expr, Op>> {
+struct Expr_Apply : Expr_Operations<Expr_Apply<Expr, Op>> {
     Expr df;
     Op op;
 
@@ -217,7 +222,7 @@ struct Expr_Apply : Operations<Expr_Apply<Expr, Op>> {
     void next() {
         _end = df.end();
 
-        tag = df.tag;
+        tag.refer(df.tag);
         value = op(df.tag, df.value);
 
         df.next();
@@ -234,7 +239,7 @@ struct Expr_Apply : Operations<Expr_Apply<Expr, Op>> {
 // Inner join two dataframes.
 template <typename Expr1, typename Expr2,
           std::invocable<typename Expr1::Tag, typename Expr1::Value, typename Expr2::Value> MergeOp>
-struct Expr_Intersection : Operations<Expr_Intersection<Expr1, Expr2, MergeOp>> {
+struct Expr_Intersection : Expr_Operations<Expr_Intersection<Expr1, Expr2, MergeOp>> {
     Expr1 df1;
     Expr2 df2;
     MergeOp merge_op;
@@ -242,6 +247,7 @@ struct Expr_Intersection : Operations<Expr_Intersection<Expr1, Expr2, MergeOp>> 
     using Tag = typename Expr2::Tag;
     using Value = std::invoke_result_t<MergeOp, Tag, typename Expr1::Value, typename Expr2::Value>;
 
+    // TODO: make these reference<>'s.
     Tag tag;
     Value value;
     bool _end;
@@ -273,7 +279,7 @@ struct Expr_Intersection : Operations<Expr_Intersection<Expr1, Expr2, MergeOp>> 
 
 // Outer join two dataframes.
 template <typename Expr1, typename Expr2>
-struct Expr_Union : Operations<Expr_Union<Expr1, Expr2>> {
+struct Expr_Union : Expr_Operations<Expr_Union<Expr1, Expr2>> {
     Expr1 df1;
     Expr2 df2;
 
@@ -290,15 +296,15 @@ struct Expr_Union : Operations<Expr_Union<Expr1, Expr2>> {
         _end = df1.end() && df2.end();
 
         if (!df1.end() && ((df1.tag < df2.tag) || df2.end())) {
-            tag = df1.tag;
-            value = df1.value;
+            tag.refer(df1.tag);
+            value.refer(df1.value);
             df1.next();
             return;
         }
 
         if (!df2.end() && ((df2.tag <= df1.tag) || df1.end())) {
-            tag = df2.tag;
-            value = df2.value;
+            tag.refer(df2.tag);
+            value.refer(df2.value);
             df2.next();
         }
     }
@@ -374,7 +380,8 @@ struct Operations {
         return Expr_Apply(to_expr(), [&op](typename Derived::Tag, const typename Derived::Value &v) { return op(v); });
     }
 
-    template <typename ReduceOp, typename ValueAccumulator>
+    template <std::invocable<typename Derived::Value, typename Derived::Value> ReduceOp,
+              std::invocable<typename Derived::Value> ValueAccumulator>
     auto reduce(ReduceOp op, ValueAccumulator init) {
         return Expr_Reduction(to_expr(), ReduceAdaptor(op, init));
     }
@@ -403,10 +410,14 @@ struct Operations {
                       [](const Derived::Value &) { return size_t(1); });
     }
 
-    auto reduce_sum() { return reduce(std::plus<>(), std::identity()); }
+    auto reduce_sum() {
+        return reduce([](const Derived::Value &x, const Derived::Value &acc) { return x + acc; },
+                      [](const Derived::Value &x) { return x; });
+    }
 
     auto reduce_max() {
-        return reduce([](Derived::Value v1, Derived::Value v2) { return v1 > v2 ? v1 : v2; }, std::identity());
+        return reduce([](const Derived::Value &x, const Derived::Value &acc) { return x > acc ? x : acc; },
+                      [](const Derived::Value &x) { return x; });
     }
 
     template <typename Expr, std::invocable<typename Derived::Value, typename Expr::Value> CollateOp>
@@ -423,7 +434,10 @@ struct Operations {
     auto concatenate(Expr df_other) {
         return Expr_Union(to_expr(), df_other.to_expr());
     }
+};
 
+template <typename Derived>
+struct Expr_Operations : Operations<Derived> {
     auto materialize() {
         auto expr = static_cast<Derived &>(*this);
 

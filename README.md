@@ -146,6 +146,9 @@ auto g = df[i];
 
 ## Inner Join (intersection)
 
+The indexing operation above is a special case of an inner join. The more
+general operation is `collate`:
+
 ```
 a: DataFrame<Tag, ValueA>
 b: DataFrame<Tag, ValueB>
@@ -154,17 +157,16 @@ b: DataFrame<Tag, ValueC>
 c = a.collate(b, collate_op)
 ```
 
-Collate_op has signature
-
+Collate_op is a function with signature
 ```
 ValueA, ValueB -> ValueC
 ```
 
-This operation is implemented under the hood with Expr_Intersect.
-
-Returns a dataframe consisting of rows of `a` and `b` that have the same tag.
+In the above `c` consists of rows of `a` and `b` that have the same tag.
 Duplicate values can be summed, or returned in pairs, or combined in any other
-way specified by the collate_op.
+way specified by the `collate_op`.
+
+This operation is implemented under the hood with Expr_Intersect.
 
 Example:
 ```
@@ -197,7 +199,8 @@ auto g = df1.concatenate(df2);
 
 ## Grouping (reduction)
 
-The grouping operation is similar to groupby in SQL and traditional dataframes, except that the group ids must be the tags of the dataframe:
+The reduction operation is similar to groupby in SQL and traditional dataframes,
+except that the group ids must be the tags of the dataframe:
 
 ```
 a: DataFrame<Tag, ValueA>
@@ -222,6 +225,25 @@ auto df = DataFrame<int, float>{.tags={1, 2, 2, 3}, .values={10., 20., 100., 30.
 // g has tags 1,2,3 and values 10, 120, 30.
 auto g = df.reduce_sum();
 ```
+
+# Materializing dataframes
+
+The operations above can be chained together to form more complicated
+operations. Unlike Pandas, where chaining operations produces a new dataframe
+after each operation,  chaining operations in this package fuses these
+operations into a new operation. That means no extraneous temporary dataframes
+are produced at each stage of the chain.
+
+For example, consider a dataframe that captures the outcome of matches between
+pairs of players:
+
+struct Match {
+    std::string player1;
+    std::string player2;
+    int score_player_1;
+    int score_player_2;
+};
+
 
 # Example of row-wise dataframe storage
 

@@ -255,6 +255,24 @@ TEST(Apply, output_types) {
     EXPECT_EQ(*g.values, (std::vector<float>{5., 10., 15.}));
 }
 
+TEST(Apply, consecutive_tags) {
+    auto df = DataFrame<size_t, float>({0, 1, 2}, {10., 20., 30.});
+
+    auto g = df.apply([](float v) { return v / 2; }).materialize();
+
+    EXPECT_EQ(*g.tags, (std::vector<size_t>{0, 1, 2}));
+    EXPECT_EQ(*g.values, (std::vector<float>{5., 10., 15.}));
+}
+
+TEST(Apply, RangeTag) {
+    auto df = DataFrame<RangeTag, float>({3}, {10., 20., 30.});
+
+    auto g = df.apply([](float v) { return v / 2; }).materialize();
+
+    EXPECT_EQ(*g.tags, (std::vector<size_t>{0, 1, 2}));
+    EXPECT_EQ(*g.values, (std::vector<float>{5., 10., 15.}));
+}
+
 TEST(Apply, find_tag) {
     auto df = DataFrame<int, float>({1, 2, 2, 3}, {10., 20., 100., 30.});
 
@@ -397,6 +415,26 @@ TEST(Columnar, Simple) {
     EXPECT_EQ(toes_per_tooth[1].v, 10.f / 32);
 }
 
+TEST(RangeTags, expression) {
+    auto edf = DataFrame<RangeTag, int>({5}, {-1, -2, -3, -4, -5}).to_expr();
+
+    EXPECT_EQ(edf.i, 0);
+    EXPECT_EQ(edf.tag, 0);
+    EXPECT_EQ(edf.value, -1);
+
+    edf.next();
+    EXPECT_EQ(edf.i, 1);
+    EXPECT_EQ(edf.tag, 1);
+    EXPECT_EQ(edf.value, -2);
+}
+
+TEST(RangeTags, expression_materialized) {
+    auto edf = DataFrame<RangeTag, int>({5}, {-1, -2, -3, -4, -5}).to_expr();
+    auto df = edf.materialize();
+
+    ASSERT_EQ(*df.tags, (std::vector<size_t>{0, 1, 2, 3, 4}));
+}
+
 TEST(RangeTags, advance_to_tag) {
     auto df = DataFrame<RangeTag, int>({5}, {-1, -2, -3, -4, -5});
     EXPECT_EQ(df.tags->size(), 5);
@@ -491,6 +529,33 @@ TEST(Concat, concate_and_sum) {
     EXPECT_EQ(*g.values, (std::vector<float>{10., 41., 30., 40.}));
 }
 
+TEST(Concatenate, concatenate_apply) {
+    struct Match {
+        std::string player1;
+        std::string player2;
+        int score_player_1;
+        int score_player_2;
+    };
+
+    DataFrame<RangeTag, Match> matches{
+        {4},
+        {
+         {"ali", "john", 10, 5},
+         {"ali", "john", 6, 8},
+         {"ali", "misha", 4, 6},
+         {"misha", "john", 5, 7},
+         }
+    };
+    auto players_1 = *matches.apply([](const Match &m) { return m.player1; });
+    std::cout << "players 1:\n" << players_1;
+
+    auto players_2 = *matches.apply([](const Match &m) { return m.player2; });
+    std::cout << "players 2:\n" << players_2;
+
+    auto players = players_1.concatenate(players_2);
+    std::cout << "players:\n" << *players;
+}
+
 TEST(Materialize, splat) {
     auto df1 = DataFrame<int, float>({1, 2, 3}, {10., 20., 30.});
     auto df2 = DataFrame<int, float>({2, 4}, {21., 40.});
@@ -546,27 +611,42 @@ TEST(Argsort, strings) {
     EXPECT_EQ(indices, (std::vector<size_t>{1, 2, 0}));
 }
 
-struct Match {
-    std::string player1;
-    std::string player2;
-    int score_player_1;
-    int score_player_2;
-};
 /*
 TEST(MatchDemo, demo) {
-    DataFrame<RangeTag, Match> matches({
-        {"ali",   "john",  10, 5},
-        {"ali",   "john",  6,  8},
-        {"ali",   "misha", 4,  6},
-        {"misha", "john",  5,  7},
-    });
+    struct Match {
+        std::string player1;
+        std::string player2;
+        int score_player_1;
+        int score_player_2;
+    };
 
-    auto winner =
-        matches.apply([](const Match &m) { return m.score_player_1 > m.score_player_2 ? m.player1 : m.player2; });
-    auto all_players =
+    DataFrame<RangeTag, Match> matches{
+        {4},
+        {
+         {"ali", "john", 10, 5},
+         {"ali", "john", 6, 8},
+         {"ali", "misha", 4, 6},
+         {"misha", "john", 5, 7},
+         }
+    };
+
+    auto wins_per_player = constant(matches.size(), 1).retag(matches.apply([](const Match &m) {
+        return m.score_player_1 > m.score_player_2 ? m.player1 : m.player2;
+    }));
+
+    auto players =
         matches.apply([](const Match &m) { return m.player1; }).concatenate(matches.apply([](const Match &m) {
             return m.player2;
         }));
-    auto all_player_1 = DataFrame<RangeTag, NoValue>()
+    std::cout << "players:\n" << *players;
+
+    auto games_per_player = constant(2 * matches.size(), 1).retag(players);
+
+    auto win_rate = wins_per_player.reduce_sum().collate(games_per_player.reduce_sum(),
+                                                         [](int wins, int games) { return float(wins) / games; });
+
+    std::cout << "wins per player:\n" << *wins_per_player;
+    std::cout << "games per player:\n" << *games_per_player;
+    std::cout << "win rate:\n" << *win_rate;
 }
 */

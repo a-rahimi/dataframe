@@ -91,3 +91,8 @@ struct std::vector<ConstantValue<T>> {
     T v;
     const T &operator[](size_t i) const { return v; }
 };
+
+template <typename T>
+auto constant(size_t length, const T &v) {
+    return DataFrame<RangeTag, ConstantValue<T>>({length}, {v});
+}

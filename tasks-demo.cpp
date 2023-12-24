@@ -265,12 +265,11 @@ auto compute_NAET_by_sorting_map(DataFrame<RangeTag, Task> df) {
 
 int main() {
     Timer timer;
-
     timer.start("Reading tab-separated file");
+
     // A materialized dataframe that contains 850k rows.
     auto tasks = read_tsv<Task>("3816f181-7751-4146-ae5e-43a7afdd9a37-0.tsv");
     timer.stop();
-
     std::cout << "read " << tasks.size() << " tasks" << std::endl;
     std::cout << "total size " << tasks.size() * sizeof(Task) / 1024 / 1024 << " MB.\n";
     std::cout << tasks[0].v;
