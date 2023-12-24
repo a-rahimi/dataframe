@@ -529,31 +529,45 @@ TEST(Concat, concate_and_sum) {
     EXPECT_EQ(*g.values, (std::vector<float>{10., 41., 30., 40.}));
 }
 
-TEST(Concatenate, concatenate_apply) {
-    struct Match {
-        std::string player1;
-        std::string player2;
-        int score_player_1;
-        int score_player_2;
-    };
+struct Match {
+    std::string player1;
+    std::string player2;
+    int score_player_1;
+    int score_player_2;
+};
 
-    DataFrame<RangeTag, Match> matches{
-        {4},
-        {
-         {"ali", "john", 10, 5},
-         {"ali", "john", 6, 8},
-         {"ali", "misha", 4, 6},
-         {"misha", "john", 5, 7},
-         }
-    };
+DataFrame<RangeTag, Match> matches{
+    {4},
+    {
+     {"ali", "john", 10, 5},
+     {"ali", "john", 6, 8},
+     {"ali", "misha", 4, 6},
+     {"misha", "john", 5, 7},
+     }
+};
+
+TEST(Concatenate, concatenate_apply) {
+    auto players_1 = matches.apply([](const Match &m) { return m.player1; });
+    auto players_2 = matches.apply([](const Match &m) { return m.player2; });
+    auto players = *players_1.concatenate(players_2);
+    ASSERT_EQ(*players.tags, (std::vector<size_t>{0, 0, 1, 1, 2, 2, 3, 3}));
+    ASSERT_EQ(*players.values,
+              (std::vector<std::string>{"john", "ali", "john", "ali", "misha", "ali", "john", "misha"}));
+}
+
+TEST(Concatenate, concatenate_apply_interim_materialization) {
     auto players_1 = *matches.apply([](const Match &m) { return m.player1; });
-    std::cout << "players 1:\n" << players_1;
+    ASSERT_EQ(*players_1.tags, (std::vector<size_t>{0, 1, 2, 3}));
+    ASSERT_EQ(*players_1.values, (std::vector<std::string>{"ali", "ali", "ali", "misha"}));
 
     auto players_2 = *matches.apply([](const Match &m) { return m.player2; });
-    std::cout << "players 2:\n" << players_2;
+    ASSERT_EQ(*players_2.tags, (std::vector<size_t>{0, 1, 2, 3}));
+    ASSERT_EQ(*players_2.values, (std::vector<std::string>{"john", "john", "misha", "john"}));
 
-    auto players = players_1.concatenate(players_2);
-    std::cout << "players:\n" << *players;
+    auto players = *players_1.concatenate(players_2);
+    ASSERT_EQ(*players.tags, (std::vector<size_t>{0, 0, 1, 1, 2, 2, 3, 3}));
+    ASSERT_EQ(*players.values,
+              (std::vector<std::string>{"john", "ali", "john", "ali", "misha", "ali", "john", "misha"}));
 }
 
 TEST(Materialize, splat) {
@@ -611,42 +625,37 @@ TEST(Argsort, strings) {
     EXPECT_EQ(indices, (std::vector<size_t>{1, 2, 0}));
 }
 
-/*
 TEST(MatchDemo, demo) {
-    struct Match {
-        std::string player1;
-        std::string player2;
-        int score_player_1;
-        int score_player_2;
-    };
+    auto num_games_won = constant(matches.size(), 1)
+                             .retag(matches.apply([](const Match &m) {
+                                 return m.score_player_1 > m.score_player_2 ? m.player1 : m.player2;
+                             }))
+                             .reduce_sum();
 
-    DataFrame<RangeTag, Match> matches{
-        {4},
-        {
-         {"ali", "john", 10, 5},
-         {"ali", "john", 6, 8},
-         {"ali", "misha", 4, 6},
-         {"misha", "john", 5, 7},
-         }
-    };
+    auto num_games_played = constant(2 * matches.size(), 1)
+                                .retag(matches.apply([](const Match &m) { return m.player1; })
+                                           .concatenate(matches.apply([](const Match &m) { return m.player2; })))
+                                .reduce_sum();
 
-    auto wins_per_player = constant(matches.size(), 1).retag(matches.apply([](const Match &m) {
-        return m.score_player_1 > m.score_player_2 ? m.player1 : m.player2;
-    }));
+    auto win_rate = *num_games_won.collate(num_games_played, [](int wins, int games) { return float(wins) / games; });
 
-    auto players =
-        matches.apply([](const Match &m) { return m.player1; }).concatenate(matches.apply([](const Match &m) {
-            return m.player2;
-        }));
-    std::cout << "players:\n" << *players;
-
-    auto games_per_player = constant(2 * matches.size(), 1).retag(players);
-
-    auto win_rate = wins_per_player.reduce_sum().collate(games_per_player.reduce_sum(),
-                                                         [](int wins, int games) { return float(wins) / games; });
-
-    std::cout << "wins per player:\n" << *wins_per_player;
-    std::cout << "games per player:\n" << *games_per_player;
-    std::cout << "win rate:\n" << *win_rate;
+    ASSERT_EQ(*win_rate.tags, (std::vector<std::string>{"ali", "john", "misha"}));
+    ASSERT_EQ(*win_rate.values, (std::vector<float>{1. / 3, 2. / 3, 0.5}));
 }
-*/
+
+TEST(MatchDemo, demo_native) {
+    std::map<std::string, int> num_games_won;
+    std::map<std::string, int> num_games_played;
+    for (const Match &m : *matches.values) {
+        const std::string &winner = m.score_player_1 > m.score_player_2 ? m.player1 : m.player2;
+        num_games_won[winner] += 1;
+        num_games_played[m.player1] += 1;
+        num_games_played[m.player2] += 1;
+    }
+
+    std::map<std::string, float> win_rate;
+    for (auto [player, won] : num_games_won) {
+        win_rate[player] = float(won) / num_games_played[player];
+        std::cout << player << '\t' << win_rate[player] << '\n';
+    }
+}

@@ -23,6 +23,7 @@ struct reference {
     auto operator=(const reference &) = delete;
 
     void refer(const T &v) { ptr = &v; }
+    void refer(const reference<T> &o) { ptr = o.ptr; }
     operator const T &() const { return *ptr; }
     bool operator==(const reference<T> other) { return *ptr == *other.ptr; }
     bool operator==(const T &other) { return *ptr == other; }
@@ -217,22 +218,27 @@ struct Expr_Apply : Expr_Operations<Expr_Apply<Expr, Op>> {
     Value value;
     bool _end;
 
-    Expr_Apply(Expr _df, Op _op) : df(_df), op(_op), _end(false) { next(); }
+    Expr_Apply(Expr _df, Op _op) : df(_df), op(_op), _end(false) { update_tagvalue(); }
 
-    void next() {
+    void update_tagvalue() {
         _end = df.end();
+        if (_end)
+            return;
 
         tag.refer(df.tag);
         value = op(df.tag, df.value);
+    }
 
+    void next() {
         df.next();
+        update_tagvalue();
     }
 
     bool end() const { return _end; }
 
     void advance_to_tag(Tag t) {
         df.advance_to_tag(t);
-        next();
+        update_tagvalue();
     }
 };
 
@@ -247,29 +253,32 @@ struct Expr_Intersection : Expr_Operations<Expr_Intersection<Expr1, Expr2, Merge
     using Tag = typename Expr2::Tag;
     using Value = std::invoke_result_t<MergeOp, Tag, typename Expr1::Value, typename Expr2::Value>;
 
-    // TODO: make these reference<>'s.
-    Tag tag;
+    reference<Tag> tag;
     Value value;
     bool _end;
 
     Expr_Intersection(Expr1 _df1, Expr2 _df2, MergeOp _merge_op)
         : df1(_df1), df2(_df2), merge_op(_merge_op), _end(false) {
-        next();
+        update_tagvalue();
     }
 
-    void next() {
+    void update_tagvalue() {
         _end = df2.end();
         for (; !df2.end(); df2.next()) {
             df1.advance_to_tag(df2.tag);
             if (df1.end())
                 continue;  // df1 has no matching tag. Move to the next tag in df2.
 
-            tag = df2.tag;
+            tag.refer(df2.tag);
             value = merge_op(df1.tag, df1.value, df2.value);
 
-            df2.next();
             break;
         }
+    }
+
+    void next() {
+        df2.next();
+        update_tagvalue();
     }
 
     bool end() const { return _end; }
@@ -290,23 +299,27 @@ struct Expr_Union : Expr_Operations<Expr_Union<Expr1, Expr2>> {
     reference<Value> value;
     bool _end;
 
-    Expr_Union(Expr1 _df1, Expr2 _df2) : df1(_df1), df2(_df2), _end(false) { next(); }
+    Expr_Union(Expr1 _df1, Expr2 _df2) : df1(_df1), df2(_df2), _end(false) { update_tagvalue(); }
 
-    void next() {
+    void update_tagvalue() {
         _end = df1.end() && df2.end();
 
         if (!df1.end() && ((df1.tag < df2.tag) || df2.end())) {
             tag.refer(df1.tag);
             value.refer(df1.value);
-            df1.next();
-            return;
-        }
-
-        if (!df2.end() && ((df2.tag <= df1.tag) || df1.end())) {
+        } else if (!df2.end() && ((df2.tag <= df1.tag) || df1.end())) {
             tag.refer(df2.tag);
             value.refer(df2.value);
-            df2.next();
         }
+    }
+
+    void next() {
+        if (!df1.end() && ((df1.tag < df2.tag) || df2.end()))
+            df1.next();
+        else if (!df2.end() && ((df2.tag <= df1.tag) || df1.end()))
+            df2.next();
+
+        update_tagvalue();
     }
 
     bool end() const { return _end; }

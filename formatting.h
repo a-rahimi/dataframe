@@ -84,5 +84,6 @@ template <typename T, typename... TSVArgs>
 DataFrame<RangeTag, T> read_tsv(const std::string& tsv_filename, TSVArgs... args) {
     DataFrame<RangeTag, T> df;
     read_tsv(*df.values, tsv_filename, args...);
+    df.tags->sz = df.values->size();
     return df;
 }
