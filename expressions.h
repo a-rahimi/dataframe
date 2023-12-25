@@ -196,50 +196,16 @@ struct Expr_Reduction : Expr_Operations<Expr_Reduction<Expr, ReduceOp>> {
         // This expression differs from all the others in that following the loop below,
         // df is ahead of this expression. At the exit form this loop, df.tag != this->tag.
         // This is why we don't store this->tag as a const_reference.
-        for (df.next(); !df.end() && (df.tag == tag); df.next())
-            value = reduce_op(df.tag, df.value, value);
+        df.next();
+        if constexpr (std::is_invocable_v<ReduceOp, Tag, typename Expr::Value, Value>) {
+            for (; !df.end() && (df.tag == tag); df.next())
+                value = reduce_op(df.tag, df.value, value);
+        }
     }
 
     bool end() const { return _end; }
 
     void advance_to_tag(Tag t) { advance_to_tag_by_linear_search(*this, t); }
-};
-
-// Applies a function to every entry of a dataframe.
-template <typename Expr, std::invocable<typename Expr::Tag, typename Expr::Value> Op>
-struct Expr_Apply : Expr_Operations<Expr_Apply<Expr, Op>> {
-    Expr df;
-    Op op;
-
-    using Tag = typename Expr::Tag;
-    using Value = std::invoke_result_t<Op, typename Expr::Tag, typename Expr::Value>;
-
-    const_reference<Tag> tag;
-    Value value;
-    bool _end;
-
-    Expr_Apply(Expr _df, Op _op) : df(_df), op(_op), _end(false) { update_tagvalue(); }
-
-    void update_tagvalue() {
-        _end = df.end();
-        if (_end)
-            return;
-
-        tag.refer(df.tag);
-        value = op(df.tag, df.value);
-    }
-
-    void next() {
-        df.next();
-        update_tagvalue();
-    }
-
-    bool end() const { return _end; }
-
-    void advance_to_tag(Tag t) {
-        df.advance_to_tag(t);
-        update_tagvalue();
-    }
 };
 
 // Inner join two dataframes.
@@ -370,38 +336,51 @@ struct Operations {
 
     auto to_dataframe() { return ::to_dataframe(static_cast<Derived &>(*this)); }
 
-    template <std::invocable<typename Derived::Tag, typename Derived::Value> RetagOp>
-    auto retag(RetagOp compute_tag) {
-        auto df = static_cast<Derived &>(*this);
-        auto df_tags = df.apply(compute_tag).materialize();
-        return Expr_Retag(df_tags, df);
+    // Applies an independent reduction to all values that have the same tag.
+    //
+    // A reduction takes two arguments: The first is the reduction operator,
+    // which takes as input an acumulator and a value to reduce onto the
+    // accumulator. The second is the initial value for the reduction. It's also
+    // a function, but it just takes the value of the first element in the
+    // reduction process and produces the result of the accumulating the
+    // singleton.
+    //
+    // TODO: This way of representing a reduction isn't amenable to parallel
+    // implementations. The reduction step should take as input two
+    // AccumulatorValues, not an AccumulatorValue and a separate Value. In other
+    // words, the reduction operator should allow merging two intermediate
+    // reduction results.
+
+    template <typename ReduceOp>
+    auto reduce(ReduceOp op) {
+        return Expr_Reduction(to_expr(), op);
     }
 
-    template <typename Expr>
-    auto retag(Expr tag_expr) {
-        auto df = static_cast<Derived &>(*this);
-        return Expr_Retag(tag_expr.to_dataframe(), df);
+    template <typename ReduceOp, std::invocable<typename Derived::Value> ValueAccumulator>
+    auto reduce(ReduceOp op, ValueAccumulator init) {
+        return reduce(ReduceAdaptor(op, init));
     }
 
+    // A special case of reduce where only the init() function for the reduction
+    // operation is supplied.
     template <std::invocable<typename Derived::Tag, typename Derived::Value> ApplyOp>
     auto apply(ApplyOp op) {
-        return Expr_Apply(to_expr(), op);
+        return Expr_Reduction(to_expr(), op);
     }
 
+    // A special case of reduce where only the init() function for the reduction
+    // operation is supplied, and init() only takes the value, and not the tag.
     template <std::invocable<typename Derived::Value> ApplyOp>
     auto apply(ApplyOp op) {
-        return Expr_Apply(to_expr(), [&op](typename Derived::Tag, const typename Derived::Value &v) { return op(v); });
+        return reduce([&op](typename Derived::Tag, const typename Derived::Value &v) { return op(v); });
     }
 
-    template <std::invocable<typename Derived::Value, typename Derived::Value> ReduceOp,
-              std::invocable<typename Derived::Value> ValueAccumulator>
-    auto reduce(ReduceOp op, ValueAccumulator init) {
-        return Expr_Reduction(to_expr(), ReduceAdaptor(op, init));
+    template <typename ReduceOp>
+    auto operator()(const ReduceOp &op) {
+        return apply(op);
     }
 
-    auto reduce_moments() {
-        return Expr_Reduction(to_expr(), Moments<typename Derived::Tag, typename Derived::Value>());
-    }
+    auto reduce_moments() { return reduce(Moments<typename Derived::Tag, typename Derived::Value>()); }
 
     auto reduce_mean() {
         return reduce_moments().apply([](const auto &m) { return m.mean(); });
@@ -433,6 +412,19 @@ struct Operations {
                       [](const Derived::Value &x) { return x; });
     }
 
+    // Replace the tags of this dataframe with the values of `tag_expr`.
+    template <typename Expr>
+    auto retag(Expr tag_expr) {
+        auto df = static_cast<Derived &>(*this);
+        return Expr_Retag(tag_expr.to_dataframe(), df);
+    }
+
+    // Tag each value of this dataframe with the result `compute_tag`.
+    template <std::invocable<typename Derived::Tag, typename Derived::Value> RetagOp>
+    auto retag(RetagOp compute_tag) {
+        return retag(apply(compute_tag));
+    }
+
     template <typename Expr, std::invocable<typename Derived::Value, typename Expr::Value> CollateOp>
     auto collate(Expr df_other, CollateOp op) {
         return Expr_Intersection(
@@ -449,6 +441,7 @@ struct Operations {
     }
 };
 
+// Operations that only work on Expr_*'s and not on materialized DataFrames.
 template <typename Derived>
 struct Expr_Operations : Operations<Derived> {
     auto materialize() {

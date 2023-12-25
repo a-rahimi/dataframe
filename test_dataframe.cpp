@@ -659,13 +659,12 @@ auto count_values(Expr expr) {
 }
 
 TEST(MatchDemo, demo2) {
-    auto num_games_won = count_values(
-        matches.apply([](const Match &m) { return m.score_player1 > m.score_player2 ? m.player1 : m.player2; }));
+    auto num_games_won =
+        count_values(matches([](const Match &m) { return m.score_player1 > m.score_player2 ? m.player1 : m.player2; }));
 
-    auto num_games_played = count_values(
-        matches.apply([](const Match &m) { return m.player1; }).concatenate(matches.apply([](const Match &m) {
-            return m.player2;
-        })));
+    auto num_games_played = count_values(matches([](const Match &m) {
+                                             return m.player1;
+                                         }).concatenate(matches([](const Match &m) { return m.player2; })));
 
     auto win_rate = *num_games_won.collate(num_games_played, [](int wins, int games) { return float(wins) / games; });
 

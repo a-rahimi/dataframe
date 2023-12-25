@@ -86,27 +86,29 @@ code, so I'm often surprised by the arguments of `loc[]` or `groupby(level)`.
 Hopefully the combination of tags and explicit dataframe types avoid these
 problems.
 
+# Tags and Indices
+
 This package borrows and modifies the notion of an index from SQL and Pandas.
 These indices are called "tags" here, and they are involved in every operation
-the package implements, including join, groupby, and indexing.  In this package,
-a dataframe is a vector of values, and each of these values is tagged with
+including join, groupby, and indexing.  In this package, a dataframe is a vector
+of values, and each of these values is tagged with
 another value:
 
 ```
 DataFrame = vector[pair[Tag, Value]]
 ```
 
-The entries in values can be any datatype, including plain datatypes like ints
-or floats, or user-defined data-types like structs or classes.  These tags can
-also be of any type, as long as they support comparison with "<".  The entries
-in the dataframe are sorted in ascending order of their tags.  These tags serve
-several purposes, including that of an index in traditional dataframes. By
-default the entries are tagged by consecutive integers, so that the tags are
-just the row id of each value in the array (in this case the tags are implied
-and aren't actually stored).  Joining two dataframes amounts to combining
-entries of the dataframes that have matching tags. The groupby operation reduces
-all entries of a dataframe that have the same tag value.  Selecting entries of a
-dataframe happens by collecting all entries that have a given set of tag values.
+The Value can be any datatype, including plain datatypes like ints or floats,
+and user-defined data-types like structs or classes.  The tags can also be of
+any type, as long as they support comparison with "<".  The entries in the
+dataframe are sorted in ascending order of their tags.  The tags  serve several
+purposes, including that of an index in traditional dataframes. By default the
+entries are tagged by consecutive integers, so that the tags are just the row id
+of each value in the array (in this case the tags are implied and aren't
+actually stored).  Joining two dataframes amounts to combining entries of the
+dataframes that have matching tags. The groupby operation reduces all entries of
+a dataframe that have the same tag value.  Selecting entries of a dataframe
+happens by collecting all entries that have a given set of tag values.
 
 
 # Dataframe Operations
@@ -206,18 +208,17 @@ except that the group ids must be the tags of the dataframe:
 a: DataFrame<Tag, ValueA>
 g: DataFrame<Tag, ValueG>
 
-g = a.reduce_sum()
-
-or more generaly,
-
 g = a.reduce(reduce_op)
+
+or more tersely,
+
+g = a(reduce_op)
 ```
 
-The first operation applies the reduction `sum` to all entries of `a` that have
-the same tag. The resulting dataframe has one row per unique tag in `a`, and the
-corresponding entry is the result of the reduction. The second operation more
-generally applies a reduction operation to the entries of `a` that have the same
-tag.
+The resulting dataframe has one row per unique tag in `a`, and the corresponding
+entry is the result of applying reduce_op to all entries that entries of `a`
+that have the same tag. A reduction operator takes as input an entry of `a` and
+an accumulation of previously reduced elements, and returns a new accumulation.
 
 ```
 auto df = DataFrame<int, float>{.tags={1, 2, 2, 3}, .values={10., 20., 100., 30.}};
@@ -226,7 +227,11 @@ auto df = DataFrame<int, float>{.tags={1, 2, 2, 3}, .values={10., 20., 100., 30.
 auto g = df.reduce_sum();
 ```
 
-# Materializing dataframes
+In the special case where `reduce_op` only takes as input an element of `a` and
+no accumulation, it is applied element-by-element without reducing elements that
+have the same tag.
+
+# Expressions and Materialized dataframes
 
 The operations above can be chained together to form more complicated
 operations. Unlike Pandas, where chaining operations produces a new dataframe
@@ -237,15 +242,24 @@ are produced at each stage of the chain.
 For example, consider a dataframe that captures the outcome of matches between
 pairs of players:
 
-struct Match {
-    std::string player1;
-    std::string player2;
-    int score_player_1;
-    int score_player_2;
-};
+
+We would like to compute the win rate of each player: the number of games they
+won divided by the number of games they played. The following piece of code
+does this:
 
 
-# Example of row-wise dataframe storage
+
+
+
+# Row-wise vs Columnwise storage
+
+Unlike traditional dataframes, this package does not take a position on row-wise
+vs columnar storage. Its dataframe are 1D vectors.  When the elements of these
+vectors are records, the dataframes behave like row-wise dataframes. When
+several vectors of scalars are combined in a C++ struct, they behave like a
+columnar store. See the section below for details.
+
+## Example of row-wise dataframe storage
 
 The vignette below illustrates row-wise storage. We'll define two dataframes, each of whose elements is a struct:
 
@@ -295,7 +309,7 @@ assert(g.values[0] == O3(O1{"green", 6}, O2{18}));
 assert(g.values[1] == O3(O1{"blue", 10}, O2{32}));
 ```
 
-# Example of columnar dataframe storage
+## Example of columnar dataframe storage
 
 The example below represents the above dataset in a columnar format:
 
@@ -334,7 +348,6 @@ auto toes_per_tooth = df.num_toes.collate(
 Almost all the operations in this package  are defined in terms of three basic
 operations:
 
-
 * Expr_Union combines the rows of two dataframes into one dataframe whose
 rows in sorted in order of their tags. This operation is analogous to an outer
 join in SQL.
@@ -355,9 +368,3 @@ time by sequentially invoking Expr_Union, which then invokves Expr_Reduce for
 each row of the dataframe. This way, we avoid producing a temporary dataframe
 for Expr_Reduce first, and feeding this temporary to Expr_Union, only to then
 delete Expr_Reduce's output.
-
-Unlike traditional dataframes, this package does not take a position on row-wise
-vs columnar storage. Its dataframe are 1D vectors.  When the elements of these
-vectors are records, the dataframes behave like row-wise dataframes. When
-several vectors of scalars are combined in a C++ struct, they behave like a
-columnar store. See the section below for details.
