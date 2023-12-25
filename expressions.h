@@ -179,7 +179,7 @@ struct Expr_Reduction : Expr_Operations<Expr_Reduction<Expr, ReduceOp>> {
     using Tag = typename Expr::Tag;
     using Value = std::invoke_result_t<ReduceOp, typename Expr::Tag, typename Expr::Value>;
 
-    const_reference<Tag> tag;
+    Tag tag;
     Value value;
     bool _end;
 
@@ -187,14 +187,17 @@ struct Expr_Reduction : Expr_Operations<Expr_Reduction<Expr, ReduceOp>> {
 
     void next() {
         _end = df.end();
+        if (_end)
+            return;
 
-        tag.refer(df.tag);
-        auto accumulation = reduce_op(df.tag, df.value);
+        tag = df.tag;
+        value = reduce_op(df.tag, df.value);
 
+        // This expression differs from all the others in that following the loop below,
+        // df is ahead of this expression. At the exit form this loop, df.tag != this->tag.
+        // This is why we don't store this->tag as a const_reference.
         for (df.next(); !df.end() && (df.tag == tag); df.next())
-            accumulation = reduce_op(df.tag, df.value, accumulation);
-
-        value = accumulation;
+            value = reduce_op(df.tag, df.value, value);
     }
 
     bool end() const { return _end; }

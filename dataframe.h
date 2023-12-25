@@ -83,8 +83,8 @@ struct std::vector<RangeTag> {
     size_t operator[](size_t i) const { return i; }
 };
 
-// DataFrames of type ConstantValue use a special version of std::vector that takes up
-// no space.
+// A std::vector for constant values. DataFrames of type ConstantValue use this
+// special version of std::vector that takes up very little space.
 template <typename T>
 struct std::vector<ConstantValue<T>> {
     using value_type = T;

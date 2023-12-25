@@ -5,27 +5,17 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <ranges>
 #include <string>
 
 // Forward declaration of a materialized dataframe.
 template <typename Tag, typename Value>
 struct DataFrame;
 
-struct NoValue;
-
 template <typename Tag, typename Value>
 std::ostream& operator<<(std::ostream& s, const DataFrame<Tag, Value>& df) {
     for (size_t i = 0; i < df.size(); ++i)
         s << df[i].t << '\t' << df[i].v << std::endl;
-    return s;
-}
-
-template <typename Tag>
-std::ostream& operator<<(std::ostream& s, const DataFrame<Tag, NoValue>& df) {
-    s << '[';
-    for (size_t i = 0; i < df.size(); ++i)
-        s << (*df.tags)[i] << ", ";
-    s << ']';
     return s;
 }
 
@@ -58,7 +48,7 @@ std::string_view get_line(char* line, int max_line_length, FILE* f) {
     }
 }
 
-template <typename Container>
+template <std::ranges::range Container>
 void read_tsv(Container& records, const std::string& tsv_filename, int header_lines = 1, int max_line_length = 5000) {
     auto tsv = std::unique_ptr<FILE, decltype(&std::fclose)>(std::fopen(tsv_filename.c_str(), "r"), &std::fclose);
     if (!tsv)
@@ -74,6 +64,7 @@ void read_tsv(Container& records, const std::string& tsv_filename, int header_li
         auto line_string_view = get_line(line, sizeof(line), tsv.get());
         if (line_string_view.empty())
             break;
+
         typename Container::value_type item;
         from_tab_separated_string(item, line_string_view);
         records.push_back(item);

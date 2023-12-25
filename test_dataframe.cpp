@@ -158,6 +158,15 @@ TEST(Reduce, sum) {
     EXPECT_EQ(*g.values, (std::vector<float>{10., 120., 30.}));
 }
 
+TEST(Reduce, RangeTag) {
+    auto df = DataFrame<RangeTag, float>({3}, {10., 20., 30.});
+
+    auto g = df.reduce_sum().materialize();
+
+    EXPECT_EQ(*g.tags, (std::vector<size_t>{0, 1, 2}));
+    EXPECT_EQ(*g.values, (std::vector<float>{10., 20., 30.}));
+}
+
 TEST(Reduce, max) {
     auto df = DataFrame<int, float>{
         {1,   2,   2,    3  },
@@ -659,18 +668,22 @@ TEST(MatchDemo, demo2) {
         })));
 
     auto win_rate = *num_games_won.collate(num_games_played, [](int wins, int games) { return float(wins) / games; });
+
     ASSERT_EQ(*win_rate.tags, (std::vector<std::string>{"ali", "john", "misha"}));
     ASSERT_EQ(*win_rate.values, (std::vector<float>{1. / 3, 2. / 3, 0.5}));
 }
 
 TEST(MatchDemo, demo_native) {
-    // Implementation of MatchDemo without without dataframes.
+    // Implement MatchDemo without without dataframes.
 
     std::map<std::string, int> num_games_won;
-    std::map<std::string, int> num_games_played;
     for (const Match &m : *matches.values) {
         const std::string &winner = m.score_player1 > m.score_player2 ? m.player1 : m.player2;
         num_games_won[winner] += 1;
+    }
+
+    std::map<std::string, int> num_games_played;
+    for (const Match &m : *matches.values) {
         num_games_played[m.player1] += 1;
         num_games_played[m.player2] += 1;
     }
