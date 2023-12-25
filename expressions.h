@@ -12,20 +12,17 @@ struct Expr_Operations;
 struct RangeTag;
 
 // A version of std::reference_wrapper that's equipped with a default constructor.
-//
-// TODO: rename this to const_reference. Because the `ptr` member is T const *,
-// the value that underlies this reference can't be changed.
 template <typename T>
-struct reference {
+struct const_reference {
     T const *ptr;
 
-    reference() : ptr(0) {}
-    auto operator=(const reference &) = delete;
+    const_reference() : ptr(0) {}
+    auto operator=(const const_reference &) = delete;
 
     void refer(const T &v) { ptr = &v; }
-    void refer(const reference<T> &o) { ptr = o.ptr; }
+    void refer(const const_reference<T> &o) { ptr = o.ptr; }
     operator const T &() const { return *ptr; }
-    bool operator==(const reference<T> other) { return *ptr == *other.ptr; }
+    bool operator==(const const_reference<T> other) { return *ptr == *other.ptr; }
     bool operator==(const T &other) { return *ptr == other; }
 };
 
@@ -37,8 +34,8 @@ struct Expr_DataFrame : Expr_Operations<Expr_DataFrame<_Tag, _Value>> {
 
     DataFrame<_Tag, _Value> df;
     size_t i;
-    reference<Tag> tag;
-    reference<Value> value;
+    const_reference<Tag> tag;
+    const_reference<Value> value;
 
     Expr_DataFrame(DataFrame<_Tag, _Value> _df) : df(_df) { update_tagvalue(0); }
 
@@ -70,7 +67,7 @@ struct Expr_DataFrame<RangeTag, _Value> : Expr_Operations<Expr_DataFrame<RangeTa
     DataFrame<RangeTag, Value> df;
     size_t i;
     Tag tag;
-    reference<Value> value;
+    const_reference<Value> value;
 
     Expr_DataFrame(DataFrame<RangeTag, _Value> _df) : df(_df) { update_tagvalue(0); }
 
@@ -143,8 +140,8 @@ struct Expr_Retag : Expr_Operations<Expr_Retag<TagT, ValueT, TagV, ValueV>> {
     using Tag = DataFrame<TagT, ValueT>::Value;
     using Value = DataFrame<TagV, ValueV>::Value;
 
-    reference<Tag> tag;
-    reference<Value> value;
+    const_reference<Tag> tag;
+    const_reference<Value> value;
     size_t i;
     std::shared_ptr<std::vector<size_t>> traversal_order;
 
@@ -182,7 +179,7 @@ struct Expr_Reduction : Expr_Operations<Expr_Reduction<Expr, ReduceOp>> {
     using Tag = typename Expr::Tag;
     using Value = std::invoke_result_t<ReduceOp, typename Expr::Tag, typename Expr::Value>;
 
-    reference<Tag> tag;
+    const_reference<Tag> tag;
     Value value;
     bool _end;
 
@@ -214,7 +211,7 @@ struct Expr_Apply : Expr_Operations<Expr_Apply<Expr, Op>> {
     using Tag = typename Expr::Tag;
     using Value = std::invoke_result_t<Op, typename Expr::Tag, typename Expr::Value>;
 
-    reference<Tag> tag;
+    const_reference<Tag> tag;
     Value value;
     bool _end;
 
@@ -253,7 +250,7 @@ struct Expr_Intersection : Expr_Operations<Expr_Intersection<Expr1, Expr2, Merge
     using Tag = typename Expr2::Tag;
     using Value = std::invoke_result_t<MergeOp, Tag, typename Expr1::Value, typename Expr2::Value>;
 
-    reference<Tag> tag;
+    const_reference<Tag> tag;
     Value value;
     bool _end;
 
@@ -295,8 +292,8 @@ struct Expr_Union : Expr_Operations<Expr_Union<Expr1, Expr2>> {
     using Tag = Expr1::Tag;
     using Value = Expr1::Value;
 
-    reference<Tag> tag;
-    reference<Value> value;
+    const_reference<Tag> tag;
+    const_reference<Value> value;
     bool _end;
 
     Expr_Union(Expr1 _df1, Expr2 _df2) : df1(_df1), df2(_df2), _end(false) { update_tagvalue(); }

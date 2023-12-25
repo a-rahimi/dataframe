@@ -532,8 +532,8 @@ TEST(Concat, concate_and_sum) {
 struct Match {
     std::string player1;
     std::string player2;
-    int score_player_1;
-    int score_player_2;
+    int score_player1;
+    int score_player2;
 };
 
 DataFrame<RangeTag, Match> matches{
@@ -628,7 +628,7 @@ TEST(Argsort, strings) {
 TEST(MatchDemo, demo) {
     auto num_games_won = constant(matches.size(), 1)
                              .retag(matches.apply([](const Match &m) {
-                                 return m.score_player_1 > m.score_player_2 ? m.player1 : m.player2;
+                                 return m.score_player1 > m.score_player2 ? m.player1 : m.player2;
                              }))
                              .reduce_sum();
 
@@ -643,11 +643,33 @@ TEST(MatchDemo, demo) {
     ASSERT_EQ(*win_rate.values, (std::vector<float>{1. / 3, 2. / 3, 0.5}));
 }
 
+template <typename Expr>
+auto count_values(Expr expr) {
+    auto df = expr.to_dataframe();
+    return constant(df.size(), 1).retag(df).reduce_sum();
+}
+
+TEST(MatchDemo, demo2) {
+    auto num_games_won = count_values(
+        matches.apply([](const Match &m) { return m.score_player1 > m.score_player2 ? m.player1 : m.player2; }));
+
+    auto num_games_played = count_values(
+        matches.apply([](const Match &m) { return m.player1; }).concatenate(matches.apply([](const Match &m) {
+            return m.player2;
+        })));
+
+    auto win_rate = *num_games_won.collate(num_games_played, [](int wins, int games) { return float(wins) / games; });
+    ASSERT_EQ(*win_rate.tags, (std::vector<std::string>{"ali", "john", "misha"}));
+    ASSERT_EQ(*win_rate.values, (std::vector<float>{1. / 3, 2. / 3, 0.5}));
+}
+
 TEST(MatchDemo, demo_native) {
+    // Implementation of MatchDemo without without dataframes.
+
     std::map<std::string, int> num_games_won;
     std::map<std::string, int> num_games_played;
     for (const Match &m : *matches.values) {
-        const std::string &winner = m.score_player_1 > m.score_player_2 ? m.player1 : m.player2;
+        const std::string &winner = m.score_player1 > m.score_player2 ? m.player1 : m.player2;
         num_games_won[winner] += 1;
         num_games_played[m.player1] += 1;
         num_games_played[m.player2] += 1;
@@ -656,6 +678,6 @@ TEST(MatchDemo, demo_native) {
     std::map<std::string, float> win_rate;
     for (auto [player, won] : num_games_won) {
         win_rate[player] = float(won) / num_games_played[player];
-        std::cout << player << '\t' << win_rate[player] << '\n';
+        // std::cout << player << '\t' << win_rate[player] << '\n';
     }
 }
