@@ -538,14 +538,14 @@ TEST(Concat, concate_and_sum) {
     EXPECT_EQ(*g.values, (std::vector<float>{10., 41., 30., 40.}));
 }
 
-struct Match {
+struct Game {
     std::string player1;
     std::string player2;
     int score_player1;
     int score_player2;
 };
 
-DataFrame<RangeTag, Match> matches{
+DataFrame<RangeTag, Game> matches{
     {4},
     {
      {"ali", "john", 10, 5},
@@ -556,8 +556,8 @@ DataFrame<RangeTag, Match> matches{
 };
 
 TEST(Concatenate, concatenate_apply) {
-    auto players_1 = matches.apply([](const Match &m) { return m.player1; });
-    auto players_2 = matches.apply([](const Match &m) { return m.player2; });
+    auto players_1 = matches.apply([](const Game &m) { return m.player1; });
+    auto players_2 = matches.apply([](const Game &m) { return m.player2; });
     auto players = *players_1.concatenate(players_2);
     ASSERT_EQ(*players.tags, (std::vector<size_t>{0, 0, 1, 1, 2, 2, 3, 3}));
     ASSERT_EQ(*players.values,
@@ -565,11 +565,11 @@ TEST(Concatenate, concatenate_apply) {
 }
 
 TEST(Concatenate, concatenate_apply_interim_materialization) {
-    auto players_1 = *matches.apply([](const Match &m) { return m.player1; });
+    auto players_1 = *matches.apply([](const Game &m) { return m.player1; });
     ASSERT_EQ(*players_1.tags, (std::vector<size_t>{0, 1, 2, 3}));
     ASSERT_EQ(*players_1.values, (std::vector<std::string>{"ali", "ali", "ali", "misha"}));
 
-    auto players_2 = *matches.apply([](const Match &m) { return m.player2; });
+    auto players_2 = *matches.apply([](const Game &m) { return m.player2; });
     ASSERT_EQ(*players_2.tags, (std::vector<size_t>{0, 1, 2, 3}));
     ASSERT_EQ(*players_2.values, (std::vector<std::string>{"john", "john", "misha", "john"}));
 
@@ -634,37 +634,16 @@ TEST(Argsort, strings) {
     EXPECT_EQ(indices, (std::vector<size_t>{1, 2, 0}));
 }
 
-TEST(MatchDemo, demo) {
-    auto num_games_won = constant(matches.size(), 1)
-                             .retag(matches.apply([](const Match &m) {
-                                 return m.score_player1 > m.score_player2 ? m.player1 : m.player2;
-                             }))
-                             .reduce_sum();
-
-    auto num_games_played = constant(2 * matches.size(), 1)
-                                .retag(matches.apply([](const Match &m) { return m.player1; })
-                                           .concatenate(matches.apply([](const Match &m) { return m.player2; })))
-                                .reduce_sum();
-
-    auto win_rate = *num_games_won.collate(num_games_played, [](int wins, int games) { return float(wins) / games; });
-
-    ASSERT_EQ(*win_rate.tags, (std::vector<std::string>{"ali", "john", "misha"}));
-    ASSERT_EQ(*win_rate.values, (std::vector<float>{1. / 3, 2. / 3, 0.5}));
-}
-
-template <typename Expr>
-auto count_values(Expr expr) {
-    auto df = expr.to_dataframe();
-    return constant(df.size(), 1).retag(df).reduce_sum();
-}
-
-TEST(MatchDemo, demo2) {
+TEST(GameDemo, dataframe) {
     auto num_games_won =
-        count_values(matches([](const Match &m) { return m.score_player1 > m.score_player2 ? m.player1 : m.player2; }));
+        matches([](const Game &m) { return m.score_player1 > m.score_player2 ? m.player1 : m.player2; })
+            .materialize()
+            .count_values();
 
-    auto num_games_played = count_values(matches([](const Match &m) {
-                                             return m.player1;
-                                         }).concatenate(matches([](const Match &m) { return m.player2; })));
+    auto num_games_played = matches([](const Game &m) { return m.player1; })
+                                .concatenate(matches([](const Game &m) { return m.player2; }))
+                                .materialize()
+                                .count_values();
 
     auto win_rate = *num_games_won.collate(num_games_played, [](int wins, int games) { return float(wins) / games; });
 
@@ -672,17 +651,19 @@ TEST(MatchDemo, demo2) {
     ASSERT_EQ(*win_rate.values, (std::vector<float>{1. / 3, 2. / 3, 0.5}));
 }
 
-TEST(MatchDemo, demo_native) {
-    // Implement MatchDemo without without dataframes.
+TEST(GameDemo, native) {
+    // Implement GameDemo without without dataframes. This demonstration
+    // replaces each dataframe in the above demo with a std::map. Under the
+    // hood, dataframes use std::map's to sort the index.
 
     std::map<std::string, int> num_games_won;
-    for (const Match &m : *matches.values) {
+    for (const Game &m : *matches.values) {
         const std::string &winner = m.score_player1 > m.score_player2 ? m.player1 : m.player2;
         num_games_won[winner] += 1;
     }
 
     std::map<std::string, int> num_games_played;
-    for (const Match &m : *matches.values) {
+    for (const Game &m : *matches.values) {
         num_games_played[m.player1] += 1;
         num_games_played[m.player2] += 1;
     }

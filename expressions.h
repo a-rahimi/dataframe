@@ -2,15 +2,6 @@
 #include <map>
 #include <type_traits>
 
-// Forward declaration.
-template <typename Tag, typename Value>
-struct DataFrame;
-
-template <typename Derived>
-struct Expr_Operations;
-
-struct RangeTag;
-
 // A version of std::reference_wrapper that's equipped with a default constructor.
 template <typename T>
 struct const_reference {
@@ -25,6 +16,9 @@ struct const_reference {
     bool operator==(const const_reference<T> other) { return *ptr == *other.ptr; }
     bool operator==(const T &other) { return *ptr == other; }
 };
+
+template <typename Derived>
+struct Expr_Operations;
 
 // A wrapper for a materialized dataframe.
 template <typename _Tag, typename _Value>
@@ -116,7 +110,7 @@ void advance_to_tag_by_linear_search(Expr &df, Tag t) {
         df.next();
 }
 
-// Compute the ordering of the elemnts of a vector that would cause it to get
+// Compute the ordering of the elements of an array that would cause it to get
 // sorted.
 template <typename T>
 void argsort(const std::vector<T> &array, std::vector<size_t> &indices) {
@@ -131,7 +125,8 @@ void argsort(const std::vector<T> &array, std::vector<size_t> &indices) {
             indices.push_back(i);
 }
 
-// Compute new tags on a materialized dataframe.
+// Replace the tags of a materialized dataframe with the values of another
+// materialized dataframe.
 template <typename TagT, typename ValueT, typename TagV, typename ValueV>
 struct Expr_Retag : Expr_Operations<Expr_Retag<TagT, ValueT, TagV, ValueV>> {
     DataFrame<TagT, ValueT> df_tags;
@@ -193,9 +188,10 @@ struct Expr_Reduction : Expr_Operations<Expr_Reduction<Expr, ReduceOp>> {
         tag = df.tag;
         value = reduce_op(df.tag, df.value);
 
-        // This expression differs from all the others in that following the loop below,
-        // df is ahead of this expression. At the exit form this loop, df.tag != this->tag.
-        // This is why we don't store this->tag as a const_reference.
+        // This expression differs from all the others in that in the operations
+        // below, df runs ahead of this expression. At the exit form this
+        // function, df.tag != this->tag.  This is why we don't store this->tag
+        // as a const_reference.
         df.next();
         if constexpr (std::is_invocable_v<ReduceOp, Tag, typename Expr::Value, Value>) {
             for (; !df.end() && (df.tag == tag); df.next())
@@ -350,7 +346,6 @@ struct Operations {
     // AccumulatorValues, not an AccumulatorValue and a separate Value. In other
     // words, the reduction operator should allow merging two intermediate
     // reduction results.
-
     template <typename ReduceOp>
     auto reduce(ReduceOp op) {
         return Expr_Reduction(to_expr(), op);

@@ -6,20 +6,23 @@
 #include <utility>
 #include <vector>
 
-// Ask clang-format to not sort the order of these. Their order is important
-// because some of these depend on each other.
-// clang-format off
-#include "timer.h"
-#include "expressions.h"
-#include "formatting.h"
-// clang-format on
-
 struct RangeTag {};
 
 struct NoTag {};
 
 template <typename _T>
 struct ConstantValue {};
+
+template <typename Derived>
+struct Operations;
+
+template <typename _Tag, typename _Value>
+struct DataFrame;
+
+template <typename T>
+auto constant(size_t length, const T &v) {
+    return DataFrame<RangeTag, ConstantValue<T>>({length}, {v});
+}
 
 /* A materialized dataframe.
 
@@ -47,9 +50,8 @@ struct DataFrame : Operations<DataFrame<_Tag, _Value>> {
 
     template <typename ValueOther>
     auto operator[](const DataFrame<Tag, ValueOther> &index) {
-        return Expr_Intersection(to_expr(*this),
-                                 to_expr(index),
-                                 [](Tag, Value v, typename DataFrame<_Tag, ValueOther>::Value) { return v; });
+        return Operations<DataFrame<_Tag, _Value>>::collate(
+            index, [](Value v, typename DataFrame<_Tag, ValueOther>::Value) { return v; });
     }
 
     auto operator[](size_t i) {
@@ -66,6 +68,8 @@ struct DataFrame : Operations<DataFrame<_Tag, _Value>> {
         };
         return TagValueConst{(*tags)[i], (*values)[i]};
     }
+
+    auto count_values() { return constant(size(), 1).retag(*this).reduce_sum(); }
 };
 
 // A std::vector for sequential tags. Instead of storing the tag values,
@@ -92,7 +96,10 @@ struct std::vector<ConstantValue<T>> {
     const T &operator[](size_t i) const { return v; }
 };
 
-template <typename T>
-auto constant(size_t length, const T &v) {
-    return DataFrame<RangeTag, ConstantValue<T>>({length}, {v});
-}
+// Ask clang-format to not sort the order of these. Their order is important
+// because some of these depend on each other.
+// clang-format off
+#include "timer.h"
+#include "expressions.h"
+#include "formatting.h"
+// clang-format on
