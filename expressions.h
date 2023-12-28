@@ -5,13 +5,6 @@
 template <typename Derived>
 struct Expr_Operations;
 
-template <typename Expr>
-void end_guard(const Expr &expr) {
-    // Enable this function to check for out of bounds on expressions.
-
-    // if (expr.end()) throw std::out_of_range("can't access expr past the end of an expr");
-}
-
 // A wrapper for a materialized dataframe.
 template <typename _Tag, typename _Value>
 struct Expr_DataFrame : Expr_Operations<Expr_DataFrame<_Tag, _Value>> {
@@ -23,21 +16,12 @@ struct Expr_DataFrame : Expr_Operations<Expr_DataFrame<_Tag, _Value>> {
 
     Expr_DataFrame(DataFrame<_Tag, _Value> _df) : df(_df), i(0) {}
 
-    const Tag &tag() const {
-        end_guard(*this);
-        return (*df.tags)[i];
-    }
-    const Value &value() const {
-        end_guard(*this);
-        return (*df.values)[i];
-    }
+    const Tag &tag() const { return (*df.tags)[i]; }
+    const Value &value() const { return (*df.values)[i]; }
 
     bool end() const { return i >= df.size(); }
 
-    void next() {
-        end_guard(*this);
-        i++;
-    }
+    void next() { i++; }
 
     void advance_to_tag(Tag t) {
         auto l = std::lower_bound(df.tags->begin(), df.tags->end(), t);
@@ -59,21 +43,12 @@ struct Expr_DataFrame<RangeTag, _Value> : Expr_Operations<Expr_DataFrame<RangeTa
 
     Expr_DataFrame(DataFrame<RangeTag, _Value> _df) : df(_df), i(0) {}
 
-    const size_t &tag() const {
-        end_guard(*this);
-        return i;
-    }
-    const Value &value() const {
-        end_guard(*this);
-        return (*df.values)[i];
-    }
+    const size_t &tag() const { return i; }
+    const Value &value() const { return (*df.values)[i]; }
 
     bool end() const { return i >= df.size(); }
 
-    void next() {
-        end_guard(*this);
-        i++;
-    }
+    void next() { i++; }
 
     void advance_to_tag(Tag t) { i = t; }
 };
@@ -142,19 +117,11 @@ struct Expr_Retag : Expr_Operations<Expr_Retag<TagT, ValueT, TagV, ValueV>> {
         argsort(*df_tags.values, *traversal_order);
     }
 
-    const Tag &tag() const {
-        end_guard(*this);
-        return (*df_tags.values)[(*traversal_order)[i]];
-    }
-    const Value &value() const {
-        end_guard(*this);
-        return (*df_values.values)[(*traversal_order)[i]];
-    }
+    const Tag &tag() const { return (*df_tags.values)[(*traversal_order)[i]]; }
 
-    void next() {
-        end_guard(*this);
-        i++;
-    }
+    const Value &value() const { return (*df_values.values)[(*traversal_order)[i]]; }
+
+    void next() { i++; }
 
     bool end() const { return i >= df_values.size(); }
 
@@ -177,8 +144,6 @@ struct Expr_Reduction : Expr_Operations<Expr_Reduction<Expr, ReduceOp>> {
     Expr_Reduction(Expr _df, ReduceOp _reduce_op) : df(_df), reduce_op(_reduce_op), _end(false) { next(); }
 
     void next() {
-        end_guard(*this);
-
         _end = df.end();
         if (_end)
             return;
@@ -226,7 +191,6 @@ struct Expr_Intersection : Expr_Operations<Expr_Intersection<Expr1, Expr2, Merge
     }
 
     void update_tagvalue() {
-        end_guard(*this);
         for (; !(_end = df2.end()); df2.next()) {
             df1.advance_to_tag(df2.tag());
             if (df1.end())
@@ -238,14 +202,8 @@ struct Expr_Intersection : Expr_Operations<Expr_Intersection<Expr1, Expr2, Merge
         }
     }
 
-    const Tag &tag() {
-        end_guard(*this);
-        return df2.tag();
-    }
-    const Value &value() {
-        end_guard(*this);
-        return _value;
-    }
+    const Tag &tag() { return df2.tag(); }
+    const Value &value() { return _value; }
 
     void next() {
         df2.next();
@@ -270,19 +228,11 @@ struct Expr_Union : Expr_Operations<Expr_Union<Expr1, Expr2>> {
 
     bool pick_from_df1() { return !df1.end() && (df2.end() || (df1.tag() < df2.tag())); }
 
-    const Tag &tag() {
-        end_guard(*this);
-        return pick_from_df1() ? df1.tag() : df2.tag();
-    }
+    const Tag &tag() { return pick_from_df1() ? df1.tag() : df2.tag(); }
 
-    const Value &value() {
-        end_guard(*this);
-        return pick_from_df1() ? df1.value() : df2.value();
-    }
+    const Value &value() { return pick_from_df1() ? df1.value() : df2.value(); }
 
     void next() {
-        end_guard(*this);
-
         if (pick_from_df1())
             df1.next();
         else
