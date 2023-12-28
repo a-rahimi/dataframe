@@ -44,7 +44,7 @@ struct Expr_DataFrame<RangeTag, _Value> : Expr_Operations<Expr_DataFrame<RangeTa
 
     Expr_DataFrame(DataFrame<RangeTag, _Value> _df) : df(_df), i(0) {}
 
-    const size_t &tag() const { return i; }
+    size_t tag() const { return i; }
 
     const Value &value() const { return (*df.values)[i]; }
 
@@ -54,29 +54,6 @@ struct Expr_DataFrame<RangeTag, _Value> : Expr_Operations<Expr_DataFrame<RangeTa
 
     void advance_to_tag(Tag t) { i = t; }
 };
-
-// Convert a dataframe to a Expr_DataFrame. If the argument is already a
-// Expr_DataFrame, just return it as is.
-template <typename Tag, typename Value>
-auto to_expr(DataFrame<Tag, Value> df) {
-    return Expr_DataFrame(df);
-}
-
-template <typename Expr>
-auto to_expr(Expr &df) {
-    return df;
-}
-
-// Materialize an expression to a dataframe, and leave a dataframe intact.
-template <typename Tag, typename Value>
-auto to_dataframe(DataFrame<Tag, Value> df) {
-    return df;
-}
-
-template <typename Expr>
-auto to_dataframe(Expr df) {
-    return df.materialize();
-}
 
 template <typename Expr, typename Tag>
 void advance_to_tag_by_linear_search(Expr &df, Tag t) {
@@ -163,6 +140,7 @@ struct Expr_Reduction : Expr_Operations<Expr_Reduction<Expr, ReduceOp>> {
 
         df.next();
 
+        // Reduce all tags that coincide if a reduction operation is supplied,
         if constexpr (std::is_invocable_v<ReduceOp, Tag, typename Expr::Value, Value>) {
             for (; !df.end() && (df.tag() == _tag); df.next())
                 _value = reduce_op(df.tag(), df.value(), _value);
@@ -280,6 +258,29 @@ struct Moments {
         return Moments{m.count + 1, m.sum + v, m.sum_squares + v * v};
     }
 };
+
+// Convert a dataframe to a Expr_DataFrame. If the argument is already a
+// Expr_DataFrame, just return it as is.
+template <typename Tag, typename Value>
+auto to_expr(DataFrame<Tag, Value> df) {
+    return Expr_DataFrame(df);
+}
+
+template <typename Expr>
+auto to_expr(Expr &df) {
+    return df;
+}
+
+// Materialize an expression to a dataframe, and leave a dataframe intact.
+template <typename Tag, typename Value>
+auto to_dataframe(DataFrame<Tag, Value> df) {
+    return df;
+}
+
+template <typename Expr>
+auto to_dataframe(Expr df) {
+    return df.materialize();
+}
 
 // The base class for Expr_*'s and materialized dataframes. These operations can
 // be applied to both.

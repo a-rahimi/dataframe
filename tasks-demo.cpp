@@ -289,16 +289,18 @@ int main() {
     {
         Timer timer;
 
-        timer.start("By sorting expr: retag expression");
-        // An expression (a non-materialized dataframe) where each row is tagged with the associate_id
-        // field of the corresponding record.
-        auto tasks_retagged = tasks.retag(tasks.apply([](const Task& t) { return t.associate_id; }));
+        timer.start("By sorting expr: extract net_associate_effort and retag");
+        // An expression (a non-materialized dataframe) whose entries correspond
+        // to tasks. The values are the net_associate_effort for the task and
+        // its tags are the associate_id.
+        auto net_associate_effort_with_tags =
+            tasks.apply([](const Task& t) { return t.net_associate_effort; }).retag(tasks.apply([](const Task& t) {
+                return t.associate_id;
+            }));
         timer.stop();
 
         timer.start("By sorting expr: Computing stats");
-        // For each unit associate, compute the average value of the net_associate_effort field,
-        // and store the result in a materialized dataframe (the * operator materializes and expression).
-        auto NAET = *tasks_retagged.apply([](const Task& t) { return t.net_associate_effort; }).reduce_mean();
+        auto NAET = *net_associate_effort_with_tags.reduce_mean();
         timer.stop();
     }
     timer.stop();
