@@ -17,11 +17,12 @@ struct Expr_DataFrame : Expr_Operations<Expr_DataFrame<_Tag, _Value>> {
     Expr_DataFrame(DataFrame<_Tag, _Value> _df) : df(_df), i(0) {}
 
     const Tag &tag() const { return (*df.tags)[i]; }
+
     const Value &value() const { return (*df.values)[i]; }
 
-    bool end() const { return i >= df.size(); }
-
     void next() { i++; }
+
+    bool end() const { return i >= df.size(); }
 
     void advance_to_tag(Tag t) {
         auto l = std::lower_bound(df.tags->begin(), df.tags->end(), t);
@@ -44,11 +45,12 @@ struct Expr_DataFrame<RangeTag, _Value> : Expr_Operations<Expr_DataFrame<RangeTa
     Expr_DataFrame(DataFrame<RangeTag, _Value> _df) : df(_df), i(0) {}
 
     const size_t &tag() const { return i; }
+
     const Value &value() const { return (*df.values)[i]; }
 
-    bool end() const { return i >= df.size(); }
-
     void next() { i++; }
+
+    bool end() const { return i >= df.size(); }
 
     void advance_to_tag(Tag t) { i = t; }
 };
@@ -143,6 +145,10 @@ struct Expr_Reduction : Expr_Operations<Expr_Reduction<Expr, ReduceOp>> {
 
     Expr_Reduction(Expr _df, ReduceOp _reduce_op) : df(_df), reduce_op(_reduce_op), _end(false) { next(); }
 
+    const Tag &tag() const { return _tag; }
+
+    const Value &value() const { return _value; }
+
     void next() {
         _end = df.end();
         if (_end)
@@ -163,9 +169,6 @@ struct Expr_Reduction : Expr_Operations<Expr_Reduction<Expr, ReduceOp>> {
         }
     }
 
-    const Tag &tag() const { return _tag; }
-    const Value &value() const { return _value; }
-
     bool end() const { return _end; }
 
     void advance_to_tag(Tag t) { advance_to_tag_by_linear_search(*this, t); }
@@ -183,15 +186,13 @@ struct Expr_Intersection : Expr_Operations<Expr_Intersection<Expr1, Expr2, Merge
     using Value = std::invoke_result_t<MergeOp, Tag, typename Expr1::Value, typename Expr2::Value>;
 
     Value _value;
-    bool _end;
 
-    Expr_Intersection(Expr1 _df1, Expr2 _df2, MergeOp _merge_op)
-        : df1(_df1), df2(_df2), merge_op(_merge_op), _end(false) {
+    Expr_Intersection(Expr1 _df1, Expr2 _df2, MergeOp _merge_op) : df1(_df1), df2(_df2), merge_op(_merge_op) {
         update_tagvalue();
     }
 
     void update_tagvalue() {
-        for (; !(_end = df2.end()); df2.next()) {
+        for (; !df2.end(); df2.next()) {
             df1.advance_to_tag(df2.tag());
             if (df1.end())
                 continue;  // df1 has no matching tag. Move to the next tag in df2.
@@ -203,6 +204,7 @@ struct Expr_Intersection : Expr_Operations<Expr_Intersection<Expr1, Expr2, Merge
     }
 
     const Tag &tag() { return df2.tag(); }
+
     const Value &value() { return _value; }
 
     void next() {
@@ -210,7 +212,7 @@ struct Expr_Intersection : Expr_Operations<Expr_Intersection<Expr1, Expr2, Merge
         update_tagvalue();
     }
 
-    bool end() const { return _end; }
+    bool end() const { return df2.end(); }
 
     void advance_to_tag(Tag t) { advance_to_tag_by_linear_search(*this, t); }
 };
