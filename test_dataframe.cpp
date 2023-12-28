@@ -82,8 +82,8 @@ TEST(Expr_DataFrame, find_tag) {
     edf.advance_to_tag(2);
 
     EXPECT_FALSE(edf.end());
-    EXPECT_EQ(edf.tag, 2);
-    EXPECT_EQ(edf.value, 20);
+    EXPECT_EQ(edf.tag(), 2);
+    EXPECT_EQ(edf.value(), 20);
     EXPECT_EQ(df[edf.i].t, 2);
     EXPECT_EQ(df[edf.i].v, 20);
 }
@@ -147,6 +147,15 @@ TEST(Index, ConstantValue) {
 
     EXPECT_EQ(*g.tags, (std::vector<int>{2, 3}));
     EXPECT_EQ(*g.values, (std::vector<float>{20., 30.}));
+}
+
+TEST(Reduce, sum_no_repeats) {
+    auto df = DataFrame<int, float>({1, 2, 3}, {10., 20., 30.});
+
+    auto g = df.reduce_sum().materialize();
+
+    EXPECT_EQ(*g.tags, (std::vector<int>{1, 2, 3}));
+    EXPECT_EQ(*g.values, (std::vector<float>{10., 20., 30.}));
 }
 
 TEST(Reduce, sum) {
@@ -428,13 +437,13 @@ TEST(RangeTags, expression) {
     auto edf = DataFrame<RangeTag, int>({5}, {-1, -2, -3, -4, -5}).to_expr();
 
     EXPECT_EQ(edf.i, 0);
-    EXPECT_EQ(edf.tag, 0);
-    EXPECT_EQ(edf.value, -1);
+    EXPECT_EQ(edf.tag(), 0);
+    EXPECT_EQ(edf.value(), -1);
 
     edf.next();
     EXPECT_EQ(edf.i, 1);
-    EXPECT_EQ(edf.tag, 1);
-    EXPECT_EQ(edf.value, -2);
+    EXPECT_EQ(edf.tag(), 1);
+    EXPECT_EQ(edf.value(), -2);
 }
 
 TEST(RangeTags, expression_materialized) {
@@ -452,8 +461,8 @@ TEST(RangeTags, advance_to_tag) {
 
     edf.advance_to_tag(3);
     EXPECT_EQ(edf.i, 3);
-    EXPECT_EQ(edf.tag, 3);
-    EXPECT_EQ(edf.value, -4);
+    EXPECT_EQ(edf.tag(), 3);
+    EXPECT_EQ(edf.value(), -4);
 
     auto [t, v] = df[edf.i];
     EXPECT_EQ(t, 3);
@@ -478,7 +487,7 @@ TEST(RangeTags, Indexing) {
     EXPECT_EQ(*c.values, (std::vector<int>{-3, -4}));
 }
 
-TEST(Concat, Interleaved_No_Overlap_Finish_With_1) {
+TEST(Concat, Interleaved_No_Overlap_Finish_With_df1) {
     auto df1 = DataFrame<int, float>({1, 4}, {10., 40.});
     auto df2 = DataFrame<int, float>({2, 3}, {20., 30.});
 
@@ -490,7 +499,7 @@ TEST(Concat, Interleaved_No_Overlap_Finish_With_1) {
     EXPECT_EQ(*g.values, (std::vector<float>{10., 20., 30., 40.}));
 }
 
-TEST(Concat, Interleaved_No_Overlap_Finish_With_2) {
+TEST(Concat, Interleaved_No_Overlap_Finish_With_df2) {
     auto df1 = DataFrame<int, float>({1, 3}, {10., 30.});
     auto df2 = DataFrame<int, float>({2, 4}, {20., 40.});
 
@@ -619,13 +628,23 @@ TEST(Retag, floats_with_repeats_2) {
 }
 
 TEST(Retag, materialized_dataframes) {
-    auto df_values = DataFrame<std::string, float>({"hi1", "ho1", "ho1", "hello1"}, {20., 10., 10., 30.});
     auto df_tags = DataFrame<std::string, float>({"hi2", "ho2", "ho2", "hello2"}, {-20., -10., -10., -30.});
+    auto df_values = DataFrame<std::string, float>({"hi1", "ho1", "ho1", "hello1"}, {20., 10., 10., 30.});
     auto g = *df_values.retag(df_tags);
 
     EXPECT_EQ(g.size(), 4);
     EXPECT_EQ(*g.tags, (std::vector<float>{-30., -20., -10., -10.}));
     EXPECT_EQ(*g.values, (std::vector<float>{30., 20., 10., 10.}));
+}
+
+TEST(Retag, advance_to_tag) {
+    auto df_tags = DataFrame<std::string, int>({"hi2", "ho2", "ho2", "hello2"}, {-20, -10, -10 - 30});
+    auto df_values = DataFrame<std::string, float>({"hi1", "ho1", "ho1", "hello1"}, {20., 10., 10., 30.});
+    auto edf = df_values.retag(df_tags);
+
+    edf.advance_to_tag(-20);
+    EXPECT_EQ(edf.tag(), -20);
+    EXPECT_EQ(edf.i, 1);
 }
 
 TEST(Argsort, strings) {

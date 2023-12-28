@@ -2,23 +2,15 @@
 #include <map>
 #include <type_traits>
 
-// A version of std::reference_wrapper that's equipped with a default constructor.
-template <typename T>
-struct const_reference {
-    T const *ptr;
-
-    const_reference() : ptr(0) {}
-    auto operator=(const const_reference &) = delete;
-
-    void refer(const T &v) { ptr = &v; }
-    void refer(const const_reference<T> &o) { ptr = o.ptr; }
-    operator const T &() const { return *ptr; }
-    bool operator==(const const_reference<T> other) { return *ptr == *other.ptr; }
-    bool operator==(const T &other) { return *ptr == other; }
-};
-
 template <typename Derived>
 struct Expr_Operations;
+
+template <typename Expr>
+void end_guard(const Expr &expr) {
+    // Enable this function to check for out of bounds on expressions.
+
+    // if (expr.end()) throw std::out_of_range("can't access expr past the end of an expr");
+}
 
 // A wrapper for a materialized dataframe.
 template <typename _Tag, typename _Value>
@@ -28,25 +20,29 @@ struct Expr_DataFrame : Expr_Operations<Expr_DataFrame<_Tag, _Value>> {
 
     DataFrame<_Tag, _Value> df;
     size_t i;
-    const_reference<Tag> tag;
-    const_reference<Value> value;
 
-    Expr_DataFrame(DataFrame<_Tag, _Value> _df) : df(_df) { update_tagvalue(0); }
+    Expr_DataFrame(DataFrame<_Tag, _Value> _df) : df(_df), i(0) {}
 
-    void update_tagvalue(size_t _i) {
-        i = _i;
-        tag.refer((*df.tags)[i]);
-        value.refer((*df.values)[i]);
+    const Tag &tag() const {
+        end_guard(*this);
+        return (*df.tags)[i];
+    }
+    const Value &value() const {
+        end_guard(*this);
+        return (*df.values)[i];
     }
 
     bool end() const { return i >= df.size(); }
 
-    void next() { update_tagvalue(i + 1); }
+    void next() {
+        end_guard(*this);
+        i++;
+    }
 
     void advance_to_tag(Tag t) {
         auto l = std::lower_bound(df.tags->begin(), df.tags->end(), t);
         if (*l == t)
-            update_tagvalue(l - df.tags->begin());
+            i = l - df.tags->begin();
         else
             i = df.size();  // Didn't find the tag. It's the end of this expression.
     }
@@ -60,25 +56,26 @@ struct Expr_DataFrame<RangeTag, _Value> : Expr_Operations<Expr_DataFrame<RangeTa
 
     DataFrame<RangeTag, Value> df;
     size_t i;
-    Tag tag;
-    const_reference<Value> value;
 
-    Expr_DataFrame(DataFrame<RangeTag, _Value> _df) : df(_df) { update_tagvalue(0); }
+    Expr_DataFrame(DataFrame<RangeTag, _Value> _df) : df(_df), i(0) {}
 
-    void update_tagvalue(size_t _i) {
-        i = _i;
-        if (end())
-            return;
-
-        tag = _i;
-        value.refer((*df.values)[_i]);
+    const size_t &tag() const {
+        end_guard(*this);
+        return i;
+    }
+    const Value &value() const {
+        end_guard(*this);
+        return (*df.values)[i];
     }
 
     bool end() const { return i >= df.size(); }
 
-    void next() { update_tagvalue(i + 1); }
+    void next() {
+        end_guard(*this);
+        i++;
+    }
 
-    void advance_to_tag(Tag t) { update_tagvalue(t); }
+    void advance_to_tag(Tag t) { i = t; }
 };
 
 // Convert a dataframe to a Expr_DataFrame. If the argument is already a
@@ -106,7 +103,7 @@ auto to_dataframe(Expr df) {
 
 template <typename Expr, typename Tag>
 void advance_to_tag_by_linear_search(Expr &df, Tag t) {
-    while (!df.end() && (df.tag != t))
+    while (!df.end() && (df.tag() != t))
         df.next();
 }
 
@@ -135,33 +132,32 @@ struct Expr_Retag : Expr_Operations<Expr_Retag<TagT, ValueT, TagV, ValueV>> {
     using Tag = DataFrame<TagT, ValueT>::Value;
     using Value = DataFrame<TagV, ValueV>::Value;
 
-    const_reference<Tag> tag;
-    const_reference<Value> value;
     size_t i;
     std::shared_ptr<std::vector<size_t>> traversal_order;
 
     Expr_Retag(DataFrame<TagT, ValueT> _df_tags, DataFrame<TagV, ValueV> _df_values)
-        : df_tags(_df_tags), df_values(_df_values), traversal_order(new std::vector<size_t>) {
+        : df_tags(_df_tags), df_values(_df_values), i(0), traversal_order(new std::vector<size_t>) {
         if (df_tags.size() != df_values.size())
             throw std::invalid_argument("df_tags and df_values must have the same length");
         argsort(*df_tags.values, *traversal_order);
-        update_tagvalue(0);
     }
 
-    void update_tagvalue(size_t _i) {
-        i = _i;
-        if (end())
-            return;
-        tag.refer((*df_tags.values)[(*traversal_order)[_i]]);
-        value.refer((*df_values.values)[(*traversal_order)[_i]]);
+    const Tag &tag() const {
+        end_guard(*this);
+        return (*df_tags.values)[(*traversal_order)[i]];
+    }
+    const Value &value() const {
+        end_guard(*this);
+        return (*df_values.values)[(*traversal_order)[i]];
     }
 
-    void next() { update_tagvalue(i + 1); }
+    void next() {
+        end_guard(*this);
+        i++;
+    }
 
     bool end() const { return i >= df_values.size(); }
 
-    // TODO: There's a faster way to advance to a tag. We just need to advance to the
-    // tag in df and map to the index of that tag.
     void advance_to_tag(Tag t) { advance_to_tag_by_linear_search(*this, t); }
 };
 
@@ -174,30 +170,36 @@ struct Expr_Reduction : Expr_Operations<Expr_Reduction<Expr, ReduceOp>> {
     using Tag = typename Expr::Tag;
     using Value = std::invoke_result_t<ReduceOp, typename Expr::Tag, typename Expr::Value>;
 
-    Tag tag;
-    Value value;
+    Tag _tag;
+    Value _value;
     bool _end;
 
     Expr_Reduction(Expr _df, ReduceOp _reduce_op) : df(_df), reduce_op(_reduce_op), _end(false) { next(); }
 
     void next() {
+        end_guard(*this);
+
         _end = df.end();
         if (_end)
             return;
-
-        tag = df.tag;
-        value = reduce_op(df.tag, df.value);
 
         // This expression differs from all the others in that in the operations
         // below, df runs ahead of this expression. At the exit form this
         // function, df.tag != this->tag.  This is why we don't store this->tag
         // as a const_reference.
+        _tag = df.tag();
+        _value = reduce_op(df.tag(), df.value());
+
         df.next();
+
         if constexpr (std::is_invocable_v<ReduceOp, Tag, typename Expr::Value, Value>) {
-            for (; !df.end() && (df.tag == tag); df.next())
-                value = reduce_op(df.tag, df.value, value);
+            for (; !df.end() && (df.tag() == _tag); df.next())
+                _value = reduce_op(df.tag(), df.value(), _value);
         }
     }
+
+    const Tag &tag() const { return _tag; }
+    const Value &value() const { return _value; }
 
     bool end() const { return _end; }
 
@@ -215,8 +217,7 @@ struct Expr_Intersection : Expr_Operations<Expr_Intersection<Expr1, Expr2, Merge
     using Tag = typename Expr2::Tag;
     using Value = std::invoke_result_t<MergeOp, Tag, typename Expr1::Value, typename Expr2::Value>;
 
-    const_reference<Tag> tag;
-    Value value;
+    Value _value;
     bool _end;
 
     Expr_Intersection(Expr1 _df1, Expr2 _df2, MergeOp _merge_op)
@@ -225,17 +226,25 @@ struct Expr_Intersection : Expr_Operations<Expr_Intersection<Expr1, Expr2, Merge
     }
 
     void update_tagvalue() {
-        _end = df2.end();
-        for (; !df2.end(); df2.next()) {
-            df1.advance_to_tag(df2.tag);
+        end_guard(*this);
+        for (; !(_end = df2.end()); df2.next()) {
+            df1.advance_to_tag(df2.tag());
             if (df1.end())
                 continue;  // df1 has no matching tag. Move to the next tag in df2.
 
-            tag.refer(df2.tag);
-            value = merge_op(df1.tag, df1.value, df2.value);
+            _value = merge_op(df1.tag(), df1.value(), df2.value());
 
             break;
         }
+    }
+
+    const Tag &tag() {
+        end_guard(*this);
+        return df2.tag();
+    }
+    const Value &value() {
+        end_guard(*this);
+        return _value;
     }
 
     void next() {
@@ -257,34 +266,30 @@ struct Expr_Union : Expr_Operations<Expr_Union<Expr1, Expr2>> {
     using Tag = Expr1::Tag;
     using Value = Expr1::Value;
 
-    const_reference<Tag> tag;
-    const_reference<Value> value;
-    bool _end;
+    Expr_Union(Expr1 _df1, Expr2 _df2) : df1(_df1), df2(_df2) {}
 
-    Expr_Union(Expr1 _df1, Expr2 _df2) : df1(_df1), df2(_df2), _end(false) { update_tagvalue(); }
+    bool pick_from_df1() { return !df1.end() && (df2.end() || (df1.tag() < df2.tag())); }
 
-    void update_tagvalue() {
-        _end = df1.end() && df2.end();
+    const Tag &tag() {
+        end_guard(*this);
+        return pick_from_df1() ? df1.tag() : df2.tag();
+    }
 
-        if (!df1.end() && ((df1.tag < df2.tag) || df2.end())) {
-            tag.refer(df1.tag);
-            value.refer(df1.value);
-        } else if (!df2.end() && ((df2.tag <= df1.tag) || df1.end())) {
-            tag.refer(df2.tag);
-            value.refer(df2.value);
-        }
+    const Value &value() {
+        end_guard(*this);
+        return pick_from_df1() ? df1.value() : df2.value();
     }
 
     void next() {
-        if (!df1.end() && ((df1.tag < df2.tag) || df2.end()))
-            df1.next();
-        else if (!df2.end() && ((df2.tag <= df1.tag) || df1.end()))
-            df2.next();
+        end_guard(*this);
 
-        update_tagvalue();
+        if (pick_from_df1())
+            df1.next();
+        else
+            df2.next();
     }
 
-    bool end() const { return _end; }
+    bool end() const { return df1.end() && df2.end(); }
 
     void advance_to_tag(Tag t) { advance_to_tag_by_linear_search(*this, t); }
 };
@@ -410,8 +415,7 @@ struct Operations {
     // Replace the tags of this dataframe with the values of `tag_expr`.
     template <typename Expr>
     auto retag(Expr tag_expr) {
-        auto df = static_cast<Derived &>(*this);
-        return Expr_Retag(tag_expr.to_dataframe(), df);
+        return Expr_Retag(tag_expr.to_dataframe(), to_dataframe());
     }
 
     // Tag each value of this dataframe with the result `compute_tag`.
@@ -444,8 +448,8 @@ struct Expr_Operations : Operations<Derived> {
 
         DataFrame<typename Derived::Tag, typename Derived::Value> mdf;
         for (; !expr.end(); expr.next()) {
-            mdf.tags->push_back(expr.tag);
-            mdf.values->push_back(expr.value);
+            mdf.tags->push_back(expr.tag());
+            mdf.values->push_back(expr.value());
         }
         return mdf;
     }
