@@ -44,7 +44,7 @@ struct Expr_DataFrame<RangeTag, _Value> : Expr_Operations<Expr_DataFrame<RangeTa
 
     Expr_DataFrame(DataFrame<RangeTag, _Value> _df) : df(_df), i(0) {}
 
-    size_t tag() const { return i; }
+    const size_t &tag() const { return i; }
 
     const Value &value() const { return (*df.values)[i]; }
 
@@ -107,6 +107,49 @@ struct Expr_Retag : Expr_Operations<Expr_Retag<TagT, ValueT, TagV, ValueV>> {
     void advance_to_tag(Tag t) { advance_to_tag_by_linear_search(*this, t); }
 };
 
+// Apply a function to every entry in an expression. Almost the same as
+// Expr_Reduce op except this expression and its dependent df remain in sync. This
+// allows it to hold a pointer to the reference expr's tag instead of a copy to it.
+//
+// TODO: I keep changing my mind on whether Expr_Apply should exist. Expr_Reduce can
+// also handle an apply operation when ReduceOp isn't a reduce operation, but it has a
+// more complicated loop structure that's error prone. I'm keep Expr_Apply around for now
+// to help me benchmark speed differences between it and Expr_Reduce.
+template <typename Expr, typename ApplyOp>
+struct Expr_Apply : Expr_Operations<Expr_Apply<Expr, ApplyOp>> {
+    Expr df;
+    ApplyOp apply_op;
+
+    using Tag = typename Expr::Tag;
+    using Value = std::invoke_result_t<ApplyOp, typename Expr::Tag, typename Expr::Value>;
+
+    const Tag *_tag;
+    Value _value;
+
+    Expr_Apply(Expr _df, ApplyOp _apply_op) : df(_df), apply_op(_apply_op) { update_tagvalue(); }
+
+    void update_tagvalue() {
+        _tag = &df.tag();
+        _value = apply_op(df.tag(), df.value());
+    }
+
+    const Tag &tag() const { return *_tag; }
+
+    const Value &value() const { return _value; }
+
+    void next() {
+        df.next();
+        update_tagvalue();
+    }
+
+    bool end() const { return df.end(); }
+
+    void advance_to_tag(const Tag &t) {
+        df.advance_to_tag(t);
+        update_tagvalue();
+    }
+};
+
 // Reduces entries of a dataframe that have the same tag.
 template <typename Expr, typename ReduceOp>
 struct Expr_Reduction : Expr_Operations<Expr_Reduction<Expr, ReduceOp>> {
@@ -140,7 +183,9 @@ struct Expr_Reduction : Expr_Operations<Expr_Reduction<Expr, ReduceOp>> {
 
         df.next();
 
-        // Reduce all tags that coincide if a reduction operation is supplied,
+        // Reduce all tags that coincide if a reduction operation is supplied. If ReduceOp
+        // is not a reduction, this expression amounts to a slightly slower version of
+        // Expr_Apply.
         if constexpr (std::is_invocable_v<ReduceOp, Tag, typename Expr::Value, Value>) {
             for (; !df.end() && (df.tag() == _tag); df.next())
                 _value = reduce_op(df.tag(), df.value(), _value);
@@ -318,14 +363,14 @@ struct Operations {
     // operation is supplied.
     template <std::invocable<typename Derived::Tag, typename Derived::Value> ApplyOp>
     auto apply(ApplyOp op) {
-        return Expr_Reduction(to_expr(), op);
+        return Expr_Apply(to_expr(), op);
     }
 
     // A special case of reduce where only the init() function for the reduction
     // operation is supplied, and init() only takes the value, and not the tag.
     template <std::invocable<typename Derived::Value> ApplyOp>
     auto apply(ApplyOp op) {
-        return reduce([&op](typename Derived::Tag, const typename Derived::Value &v) { return op(v); });
+        return apply([&op](typename Derived::Tag, const typename Derived::Value &v) { return op(v); });
     }
 
     template <typename ReduceOp>
