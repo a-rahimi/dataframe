@@ -239,14 +239,45 @@ after each operation,  chaining operations in this package fuses these
 operations into a new operation. That means no extraneous temporary dataframes
 are produced at each stage of the chain.
 
-For example, consider a dataframe that captures the outcome of matches between
-pairs of players:
+For example, consider a dataframe each of whose entries is the work accomplished by a server:
+
+```
+struct Task {
+  std::string server_id;
+  std::string jobid;
+  std::string origin;
+  float task_duration;
+  float resource_consumed;
+  TaskType kind;
+};
+
+DataFrame<RangeTag, Task> df_tasks;
+```
+
+We would like to compute a new dataframe whose rows correspond to servers and whose values are the average task_duration:
+
+```
+// An expression (a non-materialized dataframe) whose entries correspond
+// to tasks. The values are the task_duration for the task and
+// its tags are the server_id.
+auto task_duration_by_server =
+    tasks.apply([](const Task& t) { return t.task_duration; }).retag(tasks.apply([](const Task& t) {
+        return t.server_id;
+    }));
+
+// A materialized dataframe whose rows are tagged by server_id, and whose value
+// is the average task_duration for that server. The .materliaize() operator
+// causes the expression to evaluated and its result stored in a dataframe.
+auto average_task_duration_by_server = task_duration_by_server.reduce_mean().materliaze();
+```
+
+In the above, we could have replaced the ".materialize()" operation with the "*"
+shorthand as follows:
 
 
-We would like to compute the win rate of each player: the number of games they
-won divided by the number of games they played. The following piece of code
-does this:
-
+```
+auto average_task_duration_by_server = *net_associate_effort_with_tags.reduce_mean();
+```
 
 
 
